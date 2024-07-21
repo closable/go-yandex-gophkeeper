@@ -8,18 +8,16 @@ go-yandex-gophkeeper это современное и производитель
 ## Features
 
 - Сохранение(шифрование) любой приватной текстовой информации
-- Просмотр содержимиого
-- Возможность удаления(измеения информации)
+- Просмотр содержимого в незашифрованном виде
+- Возможность удаления(изменения информации)
 - Сохранение файлов с последующим восстановлением
-- Возможность сохранения(шифрования) уканных дипекторий
-- Наличие готовых клиентов под раные платформы
+- Возможность сохранения(шифрования) указанных директорий
+- Наличие готовых клиентов под разные платформы
 - Удобный полнофункциональный CLI интерфейс (для сервера и клиента)
-- Конфигурирование через параметры
-
+- Конфигурирование
 
 ## Tech
 
-Dillinger uses a number of open source projects to work properly:
 - [Go lang](https://go.dev/) An open-source programming language supported by Google
 - [gRPC](https://grpc.io/) A high performance, open source universal RPC framework
 - [postgresql](https://www.postgresql.org/) PostgreSQL: The World's Most Advanced Open Source Relational Database
