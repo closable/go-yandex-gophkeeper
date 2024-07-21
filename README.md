@@ -1,5 +1,6 @@
 # go-yandex-gophkeeper
-## _Менеджер приватной информации (выпускная работа)_
+## _Менеджер приватной информации_
+[выпускная работа practicum.yandex.ru](https://practicum.yandex.ru/profile/go-advanced/)
 
 [![Build Status](https://travis-ci.org/joemccann/dillinger.svg?branch=master)](https://github.com/closable/go-yandex-gophkeeper)
 
