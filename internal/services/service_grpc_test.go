@@ -7,8 +7,9 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client"
+	client "github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/client_service"
 	"github.com/closable/go-yandex-gophkeeper/internal/config"
+	"github.com/closable/go-yandex-gophkeeper/internal/logger"
 	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	"github.com/closable/go-yandex-gophkeeper/internal/store"
 	"google.golang.org/grpc"
@@ -18,8 +19,8 @@ import (
 
 func TestCreateUser(t *testing.T) {
 	cfg := config.LoadConfig()
-
-	srv, err := New(cfg.DSN, cfg.ServerAddress, cfg.FileServerAddress)
+	logger := logger.NewLogger()
+	srv, err := New(cfg.DSN, cfg.ServerAddress, cfg.FileServerAddress, logger)
 	if err != nil {
 		panic(err)
 	}

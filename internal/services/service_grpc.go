@@ -9,6 +9,7 @@ import (
 	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	"github.com/closable/go-yandex-gophkeeper/internal/store"
 	"github.com/closable/go-yandex-gophkeeper/internal/utils"
+	"go.uber.org/zap"
 	"google.golang.org/genproto/googleapis/rpc/code"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,14 +37,16 @@ type (
 
 	GophKeeperServer struct {
 		pb.UnimplementedGophKeeperServer
-		store GRPCStorager
-		addr  string
+		store  GRPCStorager
+		addr   string
+		logger *zap.Logger
 	}
 
 	GophKeeperFileServer struct {
 		pb.UnimplementedFilseServiceServer
-		store GRPCFileStorager
-		addr  string
+		store  GRPCFileStorager
+		addr   string
+		logger *zap.Logger
 	}
 )
 
@@ -58,9 +61,10 @@ func (s *GophKeeperServer) Login(ctx context.Context, in *pb.LoginRequest) (*pb.
 
 	token, err := utils.BuildJWTString(user.UserID)
 	if err != nil {
-		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), "error")
+		s.logger.Info(fmt.Sprintf("Error creating JWT token %s", err))
+		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), fmt.Sprintf("Error creating JWT token %s", err))
 	}
-
+	s.logger.Info(fmt.Sprintf("JWT token created %s", "OK"))
 	response.Token = token
 	return &response, nil
 }
@@ -70,6 +74,7 @@ func (s *GophKeeperServer) CreateUser(ctx context.Context, in *pb.CreateUserRequ
 	var response pb.CreateUserResponse
 
 	if len(in.User) == 0 || len(in.Pass) == 0 {
+		s.logger.Info(fmt.Sprintf("Login or password empty %s %s", in.User, in.Pass))
 		return &response, status.Errorf(codes.Code(code.Code_INVALID_ARGUMENT), "login or password empty")
 	}
 	keyString := ""
@@ -79,19 +84,23 @@ func (s *GophKeeperServer) CreateUser(ctx context.Context, in *pb.CreateUserRequ
 	}
 	key, err := utils.CryptoSeq(keyString)
 	if err != nil {
-		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), "error")
+		s.logger.Info(fmt.Sprintf("CryptoSeq error %s %s", keyString, err))
+		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
 	}
 
 	usr, err := s.store.CreateUser(in.User, in.Pass, key)
 	if err != nil {
-		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), "internal server error")
+		s.logger.Info(fmt.Sprintf("Create user error %s %s %v", in.User, in.Pass, err))
+		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), fmt.Sprintf("Create user error %s %s %v", in.User, in.Pass, err))
 	}
 
 	token, err := utils.BuildJWTString(usr.UserID)
 	if err != nil {
-		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), "error")
+		s.logger.Info(fmt.Sprintf("Error JWT token %v", err))
+		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
 	}
 
+	s.logger.Info(fmt.Sprintf("Create user %v", "OK"))
 	return &pb.CreateUserResponse{
 		User: &pb.UserDetail{
 			UserID:    int32(usr.UserID),
@@ -116,6 +125,7 @@ func (s *GophKeeperServer) ListItems(ctx context.Context, in *pb.ListItemsReques
 
 	rows, err := s.store.ListItems(userID)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Get list items error %v %v", userID, err))
 		return &response, err
 	}
 
@@ -135,6 +145,7 @@ func (s *GophKeeperServer) ListItems(ctx context.Context, in *pb.ListItemsReques
 		})
 	}
 	response.Items = data
+	s.logger.Info(fmt.Sprintf("List items %v", "OK"))
 	return &response, nil
 }
 
@@ -146,8 +157,10 @@ func (s *GophKeeperServer) DelItem(ctx context.Context, in *pb.DelItemRequest) (
 
 	err := s.store.DeleteItem(userID, int(in.DataID))
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Delete item error %v %v", userID, err))
 		return response, err
 	}
+	s.logger.Info(fmt.Sprintf("Item deleted %v", "OK"))
 	return response, nil
 }
 
@@ -180,6 +193,7 @@ func (s *GophKeeperServer) AddItem(ctx context.Context, in *pb.AddItemRequest) (
 
 	keyString, err := s.store.GetUserKeyString(userID)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Wrong key string %v %v", userID, err))
 		return &response, err
 	}
 
@@ -187,9 +201,10 @@ func (s *GophKeeperServer) AddItem(ctx context.Context, in *pb.AddItemRequest) (
 
 	err = s.store.AddItem(userID, int(in.DataType), encData, in.Name)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Add item error %v %v", userID, err))
 		return &response, err
 	}
-
+	s.logger.Info(fmt.Sprintf("Item added %v %v", userID, "OK"))
 	return &response, nil
 }
 
@@ -198,6 +213,7 @@ func (s *GophKeeperFileServer) Upload(stream pb.FilseService_UploadServer) error
 
 	file, err := os.CreateTemp("", fmt.Sprintf("tmp_%s", utils.GetRandomString(10)))
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Create temporary file failure %v", err))
 		return err
 	}
 	defer file.Close()
@@ -205,7 +221,7 @@ func (s *GophKeeperFileServer) Upload(stream pb.FilseService_UploadServer) error
 	dataID := int32(0)
 	addItemReq := &pb.AddItemWithTokenRequest{}
 	flag := false
-
+	s.logger.Info(fmt.Sprintf("Getting stream data .... %s", ""))
 	for {
 		req, err := stream.Recv()
 
@@ -222,12 +238,14 @@ func (s *GophKeeperFileServer) Upload(stream pb.FilseService_UploadServer) error
 			break
 		}
 		if err != nil {
+			s.logger.Error(fmt.Sprintf("Getting steam error %v", err))
 			return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
 		}
 		chunk := req.GetChunk()
 		fileSize += uint32(len(chunk))
 		_, err = file.Write(chunk)
 		if err != nil {
+			s.logger.Error(fmt.Sprintf("Wrighting temporary data error %v", err))
 			return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
 		}
 	}
@@ -235,6 +253,7 @@ func (s *GophKeeperFileServer) Upload(stream pb.FilseService_UploadServer) error
 	bin := make([]byte, fileSize)
 	_, err = file.ReadAt(bin, 0)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Readin temporary data error %v", err))
 		return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
 	}
 	addItemReq.Data = string(bin)
@@ -251,8 +270,10 @@ func (s *GophKeeperFileServer) Upload(stream pb.FilseService_UploadServer) error
 	}
 
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Wrong store temporary information %v", err))
 		return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
 	}
+	s.logger.Info(fmt.Sprintf("Operation new(updated) %v", "OK"))
 	return nil
 }
 
@@ -262,20 +283,23 @@ func (s *GophKeeperFileServer) AddItem(ctx context.Context, in *pb.AddItemWithTo
 
 	userID := utils.GetUserID(in.Token)
 	if userID == 0 {
+		s.logger.Error(fmt.Sprintf("Invalid auth token %v", in.Token))
 		return &response, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", in.Token)
 	}
 
 	keyString, err := s.store.GetUserKeyString(userID)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Invalid key string %v", userID))
 		return &response, err
 	}
 
 	encData := utils.Encrypt(keyString, in.Data)
 	err = s.store.AddItem(userID, int(in.DataType), encData, in.Name)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Add item error %v %v", userID, err))
 		return &response, err
 	}
-
+	s.logger.Info(fmt.Sprintf("Item added %v %v", userID, "OK"))
 	return &response, nil
 }
 
@@ -285,11 +309,13 @@ func (s *GophKeeperFileServer) UpdateItem(ctx context.Context, in *pb.UpdateItem
 
 	userID := utils.GetUserID(in.Token)
 	if userID == 0 {
+		s.logger.Error(fmt.Sprintf("Invalid auth token %v", in.Token))
 		return &response, status.Errorf(codes.Unauthenticated, "invalid auth token: %v", in.Token)
 	}
 
 	key, err := s.store.GetUserKeyString(userID)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Invalid key string %v", userID))
 		return &response, err
 	}
 
@@ -297,8 +323,9 @@ func (s *GophKeeperFileServer) UpdateItem(ctx context.Context, in *pb.UpdateItem
 
 	err = s.store.UpdateItem(userID, int(in.DataID), encData)
 	if err != nil {
+		s.logger.Error(fmt.Sprintf("Updated item error %v %v", userID, err))
 		return &response, err
 	}
-
+	s.logger.Info(fmt.Sprintf("Item updated %v %v", userID, "OK"))
 	return &response, nil
 }

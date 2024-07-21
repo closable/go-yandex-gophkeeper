@@ -3,12 +3,12 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"strings"
 
 	"github.com/closable/go-yandex-gophkeeper/internal/store"
 	"github.com/closable/go-yandex-gophkeeper/internal/utils"
+	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -27,34 +27,39 @@ type ServTransporter struct {
 	GRPCFileServ     *grpc.Server
 	GRPCFileListener net.Listener
 	GRPCListener     net.Listener
+	Logger           *zap.Logger
 }
 
 // New new instance server
-func New(DSN, addr, addrFileServ string) (*ServTransporter, error) {
+func New(DSN, addr, addrFileServ string, logger *zap.Logger) (*ServTransporter, error) {
 	var st GRPCStorager
 	var fileSt GRPCFileStorager
 	st, err := store.New(DSN)
 	if err != nil {
+		logger.Error(err.Error())
 		panic(err)
 	}
 
 	fileSt, err = store.New(DSN)
 	if err != nil {
+		logger.Error(err.Error())
 		panic(err)
 	}
-	return GRPCserv(st, fileSt, addr, addrFileServ)
+	return GRPCserv(st, fileSt, addr, addrFileServ, logger)
 }
 
 // GRPCserv configure grpc server
-func GRPCserv(store GRPCStorager, fileStore GRPCFileStorager, addr, addrFileServ string) (*ServTransporter, error) {
+func GRPCserv(store GRPCStorager, fileStore GRPCFileStorager, addr, addrFileServ string, logger *zap.Logger) (*ServTransporter, error) {
 	listen, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		panic(err)
 	}
 
 	fileListen, err := net.Listen("tcp", addrFileServ)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err.Error())
+		panic(err)
 	}
 
 	serv := grpc.NewServer(
@@ -63,17 +68,19 @@ func GRPCserv(store GRPCStorager, fileStore GRPCFileStorager, addr, addrFileServ
 	)
 	// регистрируем сервис
 	pb.RegisterGophKeeperServer(serv, &GophKeeperServer{
-		store: store,
-		addr:  addr,
+		store:  store,
+		addr:   addr,
+		logger: logger,
 	})
 
 	fileServ := grpc.NewServer()
 	// регистрируем файловый сервис
 	pb.RegisterFilseServiceServer(fileServ, &GophKeeperFileServer{
-		store: fileStore,
-		addr:  addr,
+		store:  fileStore,
+		addr:   addr,
+		logger: logger,
 	})
-
+	logger.Info("Server structure is ready!")
 	return &ServTransporter{
 		ServAddr:         addr,
 		FileServAddr:     addrFileServ,
@@ -82,6 +89,7 @@ func GRPCserv(store GRPCStorager, fileStore GRPCFileStorager, addr, addrFileServ
 		GRPCFileServ:     fileServ,
 		GRPCFileListener: fileListen,
 		GRPCListener:     listen,
+		Logger:           logger,
 	}, nil
 
 }
@@ -92,14 +100,24 @@ func (t *ServTransporter) Run() error {
 	go func() {
 		err := t.GRPCFileServ.Serve(t.GRPCFileListener)
 		if err != nil {
-			fmt.Printf("File Server error %s", err)
+			//fmt.Printf("File Server error %s", err)
+			t.Logger.Info(fmt.Sprintf("File Server error %s", err))
 			panic(err)
 		}
-		fmt.Printf("File Server started %s", t.FileServAddr)
+		//fmt.Printf("File Server started %s", t.FileServAddr)
+		t.Logger.Info(fmt.Sprintf("File Server started %s", t.FileServAddr))
 	}()
 
 	fmt.Println("Server started ", t.ServAddr)
+	t.Logger.Info(fmt.Sprintf("Server started %s", t.ServAddr))
 	return t.GRPCServ.Serve(t.GRPCListener)
+}
+
+// Shutdown use for Graceful shutdown
+func (t *ServTransporter) Shutdown(ctx context.Context) error {
+	t.GRPCServ.GracefulStop()
+	t.GRPCFileServ.GracefulStop()
+	return nil
 }
 
 // AuthFunc check auth function (middleware)

@@ -58,7 +58,7 @@ func CliAppRun(login, pass, DSN string) error {
 		switch c := text; c {
 		case "a\n":
 			marks := []string{"Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка : ", "Метка (для файла оставлять пустой) : ", "Данные (для файла полный путь) : "}
-			v := DigInput(3, marks)
+			v := DigInput(3, marks, "\n")
 			if len(v) != 3 {
 				return errors.New("invalid data input")
 			}
@@ -74,7 +74,7 @@ func CliAppRun(login, pass, DSN string) error {
 			}
 		case "z\n":
 			marks := []string{"Метка (для файла оставлять пустой) : ", "Папка/Файл (для полный путь) : "}
-			v := DigInput(2, marks)
+			v := DigInput(2, marks, "\n")
 			err := uc.zipItem(v[1])
 			if err != nil {
 				fmt.Println(err)
@@ -82,7 +82,7 @@ func CliAppRun(login, pass, DSN string) error {
 			}
 		case "d\n":
 			marks := []string{"ИД : "}
-			v := DigInput(1, marks)
+			v := DigInput(1, marks, "\n")
 			if len(v) != 1 {
 				return errors.New("invalid data input")
 			}
@@ -96,7 +96,7 @@ func CliAppRun(login, pass, DSN string) error {
 			}
 		case "u\n":
 			marks := []string{"ИД : ", "Данные :"}
-			v := DigInput(1, marks)
+			v := DigInput(2, marks, "\n")
 			if len(v) != 2 {
 				return errors.New("invalid data input")
 			}
@@ -260,7 +260,7 @@ func (uc *CliApp) zipItem(path string) error {
 }
 
 // digInput helper function for detail input
-func DigInput(n int, m []string) []string {
+func DigInput(n int, m []string, caret string) []string {
 
 	reader := bufio.NewReader(os.Stdin)
 	result := make([]string, 0)
@@ -268,14 +268,14 @@ func DigInput(n int, m []string) []string {
 	for {
 		fmt.Print(m[len(result)])
 		text, _ := reader.ReadString('\n')
-		v := text[:len(text)-1]
+		v := text[:len(text)-len(caret)]
 		result = append(result, v)
 
 		if len(result) == n {
 			return result
 		}
 
-		if text == "q\n" {
+		if text == fmt.Sprintf("q%s", caret) {
 			break
 		}
 	}
