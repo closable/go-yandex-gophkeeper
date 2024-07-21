@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+package goyandexgophkeeper;
+
+option go_package = "goyandexgophkeeper/internal/services/proto";
+
+message AddItemWithTokenRequest {
+    string token = 1;
+    int32 dataType = 2;
+    string data = 3;
+    string name = 4;
+}
+
+message AddItemRequest {
+    //int32 userID = 1;
+    int32 dataType = 1;
+    string data = 2;
+    string name = 3;
+}
+
+message AddItemResponse {
+    string error = 1;
+}
+
+message DelItemRequest {
+    //int32 userID = 1;
+    int32 dataID = 1;
+}
+
+message DelItemResponse {
+    string error = 2;
+}
+
+message UpdateItemRequest {
+    //int32 userID = 1;
+    int32 dataID = 1;
+    string data = 2;
+}
+
+message UpdateItemWithTokenRequest {
+    string token = 1;
+    int32 dataID = 2;
+    string data = 3;
+}
+
+message UpdateItemResponse {
+    string error = 1;
+}
+
+message CreateUserRequest {
+    string user = 1;
+    string pass = 2;
+    string keystring = 3;
+}
+
+message CreateUserResponse {
+    UserDetail user = 1;
+    string token = 2;
+    string error = 3;
+}
+
+message UserDetail {
+    int32 userID = 1;
+    string login = 2;
+    string keystring = 3;
+}
+
+message Item { 
+	int32 id = 1;
+	string type = 2;
+    string name = 3;
+	bool restore = 4;
+	string encdata = 5;
+	int32 length = 6;
+	int32 dataType = 7;
+}
+
+message ListItemsRequest {
+    //int32 userID = 1;
+    bool decrypted = 1;
+}
+
+message ListItemsResponse {
+    repeated Item items = 1;
+    string error = 2;
+}
+
+message LoginRequest {
+    string user = 1;
+    string pass = 2;
+}
+
+message LoginResponse {
+    string token = 1;
+    string error = 2;
+}
+
+message FileUploadRequest {
+    string token = 1;
+    int32 dataType = 2;
+    string data = 3;
+    string name = 4;
+    bytes chunk = 5;
+    int32 dataID = 6;
+}
+message FileUploadResponse {
+  string fileName = 1;
+  uint32 size = 2;
+}
+
+service GophKeeper {
+    rpc Login(LoginRequest) returns (LoginResponse);
+    rpc AddItem(AddItemRequest) returns (AddItemResponse);
+    rpc DelItem(DelItemRequest) returns (DelItemResponse);
+    rpc UpdateItem(UpdateItemRequest) returns (UpdateItemResponse);
+    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+    rpc ListItems(ListItemsRequest) returns (ListItemsResponse);
+    
+}
+
+service FilseService {
+    rpc Upload(stream FileUploadRequest) returns (FileUploadResponse);
+    rpc AddItem(AddItemWithTokenRequest) returns (AddItemResponse);
+    rpc UpdateItem(UpdateItemWithTokenRequest) returns (UpdateItemResponse);
+ }

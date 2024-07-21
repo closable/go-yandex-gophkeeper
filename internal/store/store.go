@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	_ "github.com/jackc/pgx/v5/stdlib"
-
-	"github.com/closable/go-yandex-gophkeeper/internal/utils"
 )
 
 type (
@@ -82,7 +81,7 @@ func (s *Store) AddItem(userId int, dataType int, data, name string) error {
 
 // UpdateItem update users data by id
 func (s *Store) UpdateItem(userId, dataId int, data string) error {
-	ctx, close := context.WithTimeout(context.Background(), time.Millisecond*10)
+	ctx, close := context.WithTimeout(context.Background(), time.Second*3)
 	defer close()
 
 	tx, err := s.store.BeginTx(ctx, nil)
@@ -111,7 +110,7 @@ func (s *Store) UpdateItem(userId, dataId int, data string) error {
 
 // DeleteItem delete users data by id
 func (s *Store) DeleteItem(userId, dataId int) error {
-	ctx, close := context.WithTimeout(context.Background(), time.Millisecond*10)
+	ctx, close := context.WithTimeout(context.Background(), time.Second*3)
 	defer close()
 
 	tx, err := s.store.BeginTx(ctx, nil)
@@ -141,7 +140,7 @@ func (s *Store) DeleteItem(userId, dataId int) error {
 // ListItems list items by userId
 func (s *Store) ListItems(userId int) ([]RowItem, error) {
 
-	ctx, close := context.WithTimeout(context.Background(), time.Millisecond*10)
+	ctx, close := context.WithTimeout(context.Background(), time.Second*3)
 	defer close()
 	row := &RowItem{}
 	items := make([]RowItem, 0)
@@ -150,7 +149,8 @@ func (s *Store) ListItems(userId int) ([]RowItem, error) {
 					case when d.data_type > 2 then 'данные файлов не отображаются' else d.data end data, length(d.data), d.data_type
 					FROM gophkeeper.users_data d
 					INNER JOIN gophkeeper.data_types t ON t.id = d.data_type
-					WHERE d.user_id = $1 and not d.is_deleted`
+					WHERE d.user_id = $1 and not d.is_deleted
+					ORDER BY d.id desc`
 	rows, err := s.store.QueryContext(ctx, sqlText, userId)
 	if err != nil || rows.Err() != nil {
 		return items, err
@@ -170,23 +170,20 @@ func (s *Store) ListItems(userId int) ([]RowItem, error) {
 // CreateUser create new user
 func (s *Store) CreateUser(user, pass, keyStr string) (*UserDetail, error) {
 	usr := &UserDetail{}
-	userDecoded := utils.Decrypt(keyStr, user)
-	passDecoded := utils.Decrypt(keyStr, pass)
 
-	if s.CheckUser(userDecoded) {
+	if s.CheckUser(user) {
 		return usr, fmt.Errorf("login alread busy ")
 	}
 
 	sqlText := `INSERT INTO gophkeeper.users 
 				       (login, password, key) 
 				VALUES ($1, sha256($2)::text, $3)`
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
 
 	tx, err := s.store.BeginTx(ctx, nil)
 	if err != nil {
 		return usr, err
-		//return fmt.Errorf("%s %w", errors_api.ErrorBeginTx.Error(), err)
 	}
 	defer tx.Rollback()
 
@@ -195,7 +192,7 @@ func (s *Store) CreateUser(user, pass, keyStr string) (*UserDetail, error) {
 		return usr, err
 	}
 
-	_, err = stmt.ExecContext(ctx, userDecoded, passDecoded, keyStr)
+	_, err = stmt.ExecContext(ctx, user, pass, keyStr)
 	if err != nil {
 		return usr, err
 	}
@@ -204,7 +201,7 @@ func (s *Store) CreateUser(user, pass, keyStr string) (*UserDetail, error) {
 		return usr, err
 	}
 
-	usr, err = s.GetUserInfo(userDecoded)
+	usr, err = s.GetUserInfo(user, pass)
 	if err != nil {
 		return usr, err
 	}
@@ -224,12 +221,14 @@ func (s *Store) CheckUser(user string) bool {
 }
 
 // GetUserInfo get user detail info by login
-func (s *Store) GetUserInfo(login string) (*UserDetail, error) {
-	sqlText := `SELECT user_id, login, key FROM gophkeeper.users WHERE login = $1`
+func (s *Store) GetUserInfo(login, password string) (*UserDetail, error) {
+	sqlText := `SELECT user_id, login, key 
+				FROM gophkeeper.users 
+				WHERE login = $1 and password = sha256($2)::text`
 	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
 	defer cancel()
 	user := &UserDetail{}
-	err := s.store.QueryRowContext(ctx, sqlText, login).Scan(&user.UserID, &user.Login, &user.KeyString)
+	err := s.store.QueryRowContext(ctx, sqlText, login, password).Scan(&user.UserID, &user.Login, &user.KeyString)
 	if err != nil {
 		return user, err
 	}
@@ -237,45 +236,81 @@ func (s *Store) GetUserInfo(login string) (*UserDetail, error) {
 	return user, nil
 }
 
+// GetUserKeyString helper functiion get key string by userID
+func (s *Store) GetUserKeyString(userID int) (string, error) {
+	sqlText := `SELECT key 
+				FROM gophkeeper.users 
+				WHERE user_id = $1`
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	var keyString string
+	err := s.store.QueryRowContext(ctx, sqlText, userID).Scan(&keyString)
+	if err != nil {
+		return "", err
+	}
+
+	return keyString, nil
+}
+
+// dropUser helper functions only for test
+func (s *Store) DropUser(login string) error {
+	sqlText := `DELETE FROM gophkeeper.users WHERE login = $1`
+	_, err := s.store.Exec(sqlText, login)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// dropData information helper functions only for test
+func (s *Store) DropData(dataID int) error {
+	sqlText := `DELETE FROM gophkeeper.users_data WHERE id = $1`
+	_, err := s.store.Exec(sqlText, dataID)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// заглушка для удовлетворению интерфейса
+func (s *Store) Upload(stream pb.FilseService_UploadServer) (*pb.FileUploadResponse, error) {
+	var resp pb.FileUploadResponse
+	return &resp, nil
+}
+
 /*
 CREATE SCHEMA gophkeeper
     AUTHORIZATION postgres;
 -----------------------------------
-CREATE TABLE gophkeeper.users
-(
-    user_id bigserial NOT NULL,
-    login character varying(250) NOT NULL,
-    password character varying(250) NOT NULL,
-    is_active boolean DEFAULT true,
-    PRIMARY KEY (user_id)
+CREATE TABLE gophkeeper.users (
+	user_id bigserial NOT NULL,
+	login varchar(250) NOT NULL,
+	"password" varchar(250) NOT NULL,
+	is_active bool DEFAULT true NULL,
+	"key" varchar(255) NULL,
+	CONSTRAINT users_pkey PRIMARY KEY (user_id)
 );
 
 ALTER TABLE IF EXISTS gophkeeper.users
     OWNER to postgres;
 -----------------------------------
-CREATE TABLE gophkeeper.users_data
-(
-    id bigserial NOT NULL,
-    user_id bigserial NOT NULL,
-    data_type integer,
-    data text,
-    PRIMARY KEY (id)
+
+CREATE TABLE gophkeeper.users_data (
+	id bigserial NOT NULL,
+	user_id bigserial NOT NULL,
+	data_type int4 NULL,
+	"data" text NULL,
+	is_deleted bool DEFAULT false NULL,
+	"name" varchar(255) COLLATE "ru_RU" NULL,
+	is_restore bool DEFAULT false NULL,
+	CONSTRAINT users_data_pkey PRIMARY KEY (id)
 );
 
-ALTER TABLE IF EXISTS gophkeeper.users_data
-    OWNER to postgres;
------------------------------------
-
-CREATE TABLE gophkeeper.data_types
-(
-    id bigserial NOT NULL,
-    name character varying(255) NOT NULL,
-    is_deleted boolean DEFAULT false,
-    PRIMARY KEY (id)
+CREATE TABLE gophkeeper.data_types (
+	id bigserial NOT NULL,
+	"name" varchar(255) NOT NULL,
+	is_deleted bool DEFAULT false NULL,
+	CONSTRAINT data_types_pkey PRIMARY KEY (id)
 );
-
-ALTER TABLE IF EXISTS gophkeeper.data_types
-    OWNER to postgres;
------------------------------------
 
 */

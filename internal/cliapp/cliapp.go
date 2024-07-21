@@ -1,30 +1,56 @@
+// Package cliapp create CLI and start CLI server mode
 package cliapp
 
 import (
 	"bufio"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/closable/go-yandex-gophkeeper/internal/store"
 	"github.com/closable/go-yandex-gophkeeper/internal/utils"
 )
 
+// CliApp main structure server CLI
 type CliApp struct {
-	user *store.UserDetail
-	db   *store.Store
+	user  *store.UserDetail
+	store CliStorager
+}
+
+// CliStorager интерфейс
+type CliStorager interface {
+	AddItem(userId, dataType int, data, name string) error
+	GetUserInfo(login, password string) (*store.UserDetail, error)
+	ListItems(userId int) ([]store.RowItem, error)
+	UpdateItem(userId, dataId int, data string) error
+	DeleteItem(userId, dataId int) error
 }
 
 // CliAppRun run cli app
-func CliAppRun(u *store.UserDetail, db *store.Store) error {
+func CliAppRun(login, pass, DSN string) error {
+	var st CliStorager
+
+	st, err := store.New(DSN)
+	if err != nil {
+		panic(err)
+	}
+
+	usr, err := st.GetUserInfo(login, pass)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			fmt.Println(err)
+		}
+		return err
+	}
+
 	uc := &CliApp{
-		user: u,
-		db:   db,
+		user:  usr,
+		store: st,
 	}
 	reader := bufio.NewReader(os.Stdin)
-	cliHelp()
+	CliHelp()
 	for {
 		fmt.Print("Enter command: > ")
 		text, _ := reader.ReadString('\n')
@@ -32,7 +58,7 @@ func CliAppRun(u *store.UserDetail, db *store.Store) error {
 		switch c := text; c {
 		case "a\n":
 			marks := []string{"Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка : ", "Метка (для файла оставлять пустой) : ", "Данные (для файла полный путь) : "}
-			v := digInput(3, marks)
+			v := DigInput(3, marks)
 			if len(v) != 3 {
 				return errors.New("invalid data input")
 			}
@@ -46,10 +72,17 @@ func CliAppRun(u *store.UserDetail, db *store.Store) error {
 			if err != nil {
 				continue
 			}
-
+		case "z\n":
+			marks := []string{"Метка (для файла оставлять пустой) : ", "Папка/Файл (для полный путь) : "}
+			v := DigInput(2, marks)
+			err := uc.zipItem(v[1])
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
 		case "d\n":
 			marks := []string{"ИД : "}
-			v := digInput(1, marks)
+			v := DigInput(1, marks)
 			if len(v) != 1 {
 				return errors.New("invalid data input")
 			}
@@ -63,7 +96,7 @@ func CliAppRun(u *store.UserDetail, db *store.Store) error {
 			}
 		case "u\n":
 			marks := []string{"ИД : ", "Данные :"}
-			v := digInput(1, marks)
+			v := DigInput(1, marks)
 			if len(v) != 2 {
 				return errors.New("invalid data input")
 			}
@@ -75,31 +108,34 @@ func CliAppRun(u *store.UserDetail, db *store.Store) error {
 			if err != nil {
 				return err
 			}
-
 		case "h\n":
-			cliHelp()
+			CliHelp()
 		case "l\n":
 			uc.listItems(false)
 		case "p\n":
 			uc.listItems(true)
 		case "q\n":
-			fmt.Println("Работа завершена")
+			fmt.Println("Работа завершена!")
 			return nil
 		}
 	}
 }
 
 // cliHelp cli help
-func cliHelp() {
+func CliHelp() {
 	var commands = make(map[string]string)
 	commands["a"] = "Добавление"
-	commands["d"] = "Удалиние"
+	commands["d"] = "Удаление"
 	commands["u"] = "Обновление"
+	commands["z"] = "Сжать файл/папка"
 
 	commands["h"] = "Помощь"
 	commands["l"] = "Просмотреть"
 	commands["p"] = "Показать пароли"
 	commands["q"] = "Выход"
+
+	commands["r"] = "Регистрация"
+	commands["k"] = "Аутентификация(клиент)"
 
 	for k, v := range commands {
 		fmt.Printf("%s %s \n", k, v)
@@ -108,24 +144,12 @@ func cliHelp() {
 
 // listItems cli list user data
 func (uc *CliApp) listItems(enc bool) error {
-	data, err := uc.db.ListItems(uc.user.UserID)
+	data, err := uc.store.ListItems(uc.user.UserID)
 	if err != nil {
 		return err
 	}
-	fmt.Println(strings.Repeat("_", 123))
-	fmt.Printf("| %3s | %-15s | %-25s | %-55s| %-10s |\n", "ИД", "Тип", "Метка", "Данные", "Размер,байт")
-	fmt.Println(strings.Repeat("-", 123))
 
-	for _, v := range data {
-		data := v.EncData
-		name := catStringData(v.Name, 20)
-		if enc && v.DataType < 3 {
-			data = utils.Decrypt(uc.user.KeyString, v.EncData)
-		}
-		data = catStringData(data, 50)
-		fmt.Printf("| %3d | %-15s | %-25s | %-55s| %11d |\n", v.Id, v.Type, name, data, v.Length)
-	}
-	fmt.Println(strings.Repeat("-", 123))
+	utils.OutputListCli(data, enc, uc.user.KeyString)
 	return nil
 }
 
@@ -144,18 +168,49 @@ func (uc *CliApp) addItem(dataType int, data, name string) error {
 		encData = utils.Encrypt(uc.user.KeyString, string(file))
 
 		// store enc data into bin file
-		pathBin := utils.MakePathBinFile(data)
+		pathBin := utils.MakePathFile(data, "bin")
 		err = utils.StoreFileData(pathBin, encData)
 		if err != nil {
 			fmt.Println(err)
 			return nil
 		}
+	case 4:
+		// create Zip arhive
+		zipPath, err := utils.ZipFolder(data)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		// read data from arhive
+		file, err := utils.GetFileData(zipPath)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		mark = data
+		// encrypt data
+		encData = utils.Encrypt(uc.user.KeyString, string(file))
 
+		// store enc data into bin file
+		pathBin := utils.MakePathFile(data, "bin")
+		err = utils.StoreFileData(pathBin, encData)
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		// remove zip arhive
+		// err := os.RemoveAll("directoryname") is needed
+		err = os.Remove(zipPath)
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		fmt.Println("Операция завершена")
 	default:
 		encData = utils.Encrypt(uc.user.KeyString, data)
 	}
 
-	err := uc.db.AddItem(uc.user.UserID, dataType, encData, mark)
+	err := uc.store.AddItem(uc.user.UserID, dataType, encData, mark)
 	if err != nil {
 		fmt.Println("Ошибка при добавлении данных", err)
 		return err
@@ -167,7 +222,7 @@ func (uc *CliApp) addItem(dataType int, data, name string) error {
 // updateItem update item info
 func (uc *CliApp) updateItem(id int, data string) error {
 	encData := utils.Encrypt(uc.user.KeyString, data)
-	err := uc.db.UpdateItem(uc.user.UserID, id, encData)
+	err := uc.store.UpdateItem(uc.user.UserID, id, encData)
 	if err != nil {
 		fmt.Println("Ошибка при обновлении данных!", err)
 		return err
@@ -178,7 +233,7 @@ func (uc *CliApp) updateItem(id int, data string) error {
 
 // deleteItem delete selected row
 func (uc *CliApp) deleteItem(id int) error {
-	err := uc.db.DeleteItem(uc.user.UserID, id)
+	err := uc.store.DeleteItem(uc.user.UserID, id)
 	if err != nil {
 		return err
 	}
@@ -187,8 +242,25 @@ func (uc *CliApp) deleteItem(id int) error {
 	return nil
 }
 
+// zipItem create zip arhive a folder
+func (uc *CliApp) zipItem(path string) error {
+	zipPath, err := utils.ZipFolder(path)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	err = uc.addItem(4, zipPath, zipPath)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	return nil
+}
+
 // digInput helper function for detail input
-func digInput(n int, m []string) []string {
+func DigInput(n int, m []string) []string {
 
 	reader := bufio.NewReader(os.Stdin)
 	result := make([]string, 0)
@@ -208,12 +280,4 @@ func digInput(n int, m []string) []string {
 		}
 	}
 	return result
-}
-
-// catStringData helper for formatting string
-func catStringData(s string, n int) string {
-	if len([]byte(s)) > n {
-		return s[:n+1] + "..."
-	}
-	return s
 }
