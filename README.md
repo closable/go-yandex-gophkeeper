@@ -26,12 +26,16 @@ go-yandex-gophkeeper это современное и производитель
 For server...
 
 ```sh
-./server -a="192.168.0.116:8080" -f="192.168.0.116:8090"
+docker build -t go-yandex-gophkeeper:local .
+```
+
+```sh
+docker-compose up    
 ```
 
 For client
 ```sh
-./client-darwin-m1 -a="192.168.0.116:8080" -f="192.168.0.116:8090"
+.client-darwin-m1 -a=:3000 -f=:3100
 ```
 
 

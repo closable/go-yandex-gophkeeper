@@ -166,7 +166,6 @@ func (c *GKClient) Run() error {
 			if len(v) != 2 {
 				return errors.New("invalid data input")
 			}
-			fmt.Println(v[0], len(v[0]), v[1], len(v[1]))
 			err := client.Login(v[0], v[1])
 			if err != nil {
 				fmt.Println(err)

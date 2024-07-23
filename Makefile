@@ -28,4 +28,11 @@ test:
 cover:
 	go test -cover ./...
 
+migration_up: 
+	migrate -path internal/store/migration/ -database "postgres://postgres:postgres@host.docker.internal:25432/postgres?sslmode=disable" -verbose up
+
+migration_down: 
+	migrate -path internal/store/migration/ -database "postgres://postgres:postgres@host.docker.internal:25432/postgres?sslmode=disable" -verbose down
+
+
 .PHONY: proto build-win build-m1 build-linux test cover

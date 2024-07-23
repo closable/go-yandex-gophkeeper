@@ -38,6 +38,8 @@ func New(connString string) (*Store, error) {
 		return nil, err
 	}
 
+	//PrepareDB(db)
+
 	return &Store{
 		store: db,
 	}, nil
@@ -278,39 +280,56 @@ func (s *Store) Upload(stream pb.FilseService_UploadServer) (*pb.FileUploadRespo
 	return &resp, nil
 }
 
-/*
-CREATE SCHEMA gophkeeper
-    AUTHORIZATION postgres;
------------------------------------
-CREATE TABLE gophkeeper.users (
-	user_id bigserial NOT NULL,
-	login varchar(250) NOT NULL,
-	"password" varchar(250) NOT NULL,
-	is_active bool DEFAULT true NULL,
-	"key" varchar(255) NULL,
-	CONSTRAINT users_pkey PRIMARY KEY (user_id)
-);
+// Сервисная функция, реализующая первоначальное состояние таблиц данных
+// func PrepareDB(d *sql.DB) error {
+// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+// 	defer cancel()
+// 	pipe := make([]string, 5)
+// 	pipe[0] = `CREATE SCHEMA IF NOT EXISTS gophkeeper`
+// 	pipe[1] = `CREATE TABLE IF NOT EXISTS gophkeeper.users (
+// 				user_id bigserial NOT NULL,
+// 				login varchar(250) NOT NULL,
+// 				password varchar(250) NOT NULL,
+// 				is_active bool DEFAULT true NULL,
+// 				key varchar(255) NULL,
+// 				CONSTRAINT users_pkey PRIMARY KEY (user_id)
+// 				)`
+// 	pipe[2] = `CREATE TABLE IF NOT EXISTS gophkeeper.users_data (
+// 				id bigserial NOT NULL,
+// 				user_id bigserial NOT NULL,
+// 				data_type int4 NULL,
+// 				data text NULL,
+// 				is_deleted bool DEFAULT false NULL,
+// 				name varchar(255) NULL,
+// 				is_restore bool DEFAULT false NULL,
+// 				CONSTRAINT users_data_pkey PRIMARY KEY (id)
+// 			)`
+// 	pipe[3] = `CREATE TABLE IF NOT EXISTS gophkeeper.data_types (
+// 				id bigserial NOT NULL,
+// 				name varchar(255) NOT NULL,
+// 				is_deleted bool DEFAULT false NULL,
+// 				CONSTRAINT data_types_pkey PRIMARY KEY (id)
+// 			)`
+// 	pipe[4] = `merge into gophkeeper.data_types dt	using (
+// 					select 1 id, 'PlainText' name,  false is_deleted
+// 					union
+// 					select 2 id, 'KeyValue' name, false is_deleted
+// 					union
+// 					select 3 id, 'FileData' name, false is_deleted
+// 					union
+// 					select 4 id, 'FolderData' name, false is_deleted
+// 				) as res on (dt.id = res.id)
+// 					when not matched then
+// 					insert (id, name, is_deleted)
+// 					values (res.id, res.name, res.is_deleted)`
 
-ALTER TABLE IF EXISTS gophkeeper.users
-    OWNER to postgres;
------------------------------------
+// 	for ind, sql := range pipe {
+// 		_, err := d.ExecContext(ctx, sql)
+// 		if err != nil {
+// 			fmt.Println(ind, sql, err)
+// 			return err
+// 		}
+// 	}
 
-CREATE TABLE gophkeeper.users_data (
-	id bigserial NOT NULL,
-	user_id bigserial NOT NULL,
-	data_type int4 NULL,
-	"data" text NULL,
-	is_deleted bool DEFAULT false NULL,
-	"name" varchar(255) COLLATE "ru_RU" NULL,
-	is_restore bool DEFAULT false NULL,
-	CONSTRAINT users_data_pkey PRIMARY KEY (id)
-);
-
-CREATE TABLE gophkeeper.data_types (
-	id bigserial NOT NULL,
-	"name" varchar(255) NOT NULL,
-	is_deleted bool DEFAULT false NULL,
-	CONSTRAINT data_types_pkey PRIMARY KEY (id)
-);
-
-*/
+// 	return nil
+// }

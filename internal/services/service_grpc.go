@@ -17,6 +17,7 @@ import (
 
 type (
 	GRPCStorager interface {
+		//PrepareDB() error
 		AddItem(userId, dataType int, data, name string) error
 		GetUserInfo(login, password string) (*store.UserDetail, error)
 		ListItems(userId int) ([]store.RowItem, error)

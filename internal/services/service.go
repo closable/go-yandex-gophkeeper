@@ -80,6 +80,7 @@ func GRPCserv(store GRPCStorager, fileStore GRPCFileStorager, addr, addrFileServ
 		addr:   addr,
 		logger: logger,
 	})
+
 	logger.Info("Server structure is ready!")
 	return &ServTransporter{
 		ServAddr:         addr,
