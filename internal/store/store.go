@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/closable/go-yandex-gophkeeper/internal/errors"
 	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -52,26 +53,26 @@ func (s *Store) AddItem(userId int, dataType int, data, name string) error {
 	if dataType > 2 {
 		timeout = time.Second * 10
 	}
-	ctx, close := context.WithTimeout(context.Background(), timeout)
+	ctxIn, close := context.WithTimeout(context.Background(), timeout)
 	defer close()
 
-	tx, err := s.store.BeginTx(ctx, nil)
+	tx, err := s.store.BeginTx(ctxIn, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorTxDB, err)
 	}
 	defer tx.Rollback()
 
 	sqlText := `INSERT INTO gophkeeper.users_data 
 				(user_id, data_type, data, name) 
 				VALUES($1, $2, $3, $4)`
-	stmt, err := tx.PrepareContext(ctx, sqlText)
+	stmt, err := tx.PrepareContext(ctxIn, sqlText)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorPrepareDB, err)
 	}
 
-	_, err = stmt.ExecContext(ctx, userId, dataType, data, name)
+	_, err = stmt.ExecContext(ctxIn, userId, dataType, data, name)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorExecDB, err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -88,23 +89,23 @@ func (s *Store) UpdateItem(userId, dataId int, data string) error {
 
 	tx, err := s.store.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorTxDB, err)
 	}
 	defer tx.Rollback()
 
 	sqlText := "UPDATE gophkeeper.users_data SET data = $3 WHERE id = $2 and user_id = $1"
 	stmt, err := tx.PrepareContext(ctx, sqlText)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorPrepareDB, err)
 	}
 
 	_, err = stmt.ExecContext(ctx, userId, dataId, data)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorExecDB, err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorCommitDB, err)
 	}
 
 	return nil
@@ -117,23 +118,23 @@ func (s *Store) DeleteItem(userId, dataId int) error {
 
 	tx, err := s.store.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorTxDB, err)
 	}
 	defer tx.Rollback()
 
 	sqlText := `UPDATE gophkeeper.users_data SET is_deleted = true WHERE id = $2 and user_id = $1`
 	stmt, err := tx.PrepareContext(ctx, sqlText)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorPrepareDB, err)
 	}
 
 	_, err = stmt.ExecContext(ctx, userId, dataId)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorExecDB, err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorCommitDB, err)
 	}
 
 	return nil
@@ -174,7 +175,7 @@ func (s *Store) CreateUser(user, pass, keyStr string) (*UserDetail, error) {
 	usr := &UserDetail{}
 
 	if s.CheckUser(user) {
-		return usr, fmt.Errorf("login alread busy ")
+		return usr, fmt.Errorf("%v", errors.ErrorLoginInfo)
 	}
 
 	sqlText := `INSERT INTO gophkeeper.users 
@@ -185,22 +186,22 @@ func (s *Store) CreateUser(user, pass, keyStr string) (*UserDetail, error) {
 
 	tx, err := s.store.BeginTx(ctx, nil)
 	if err != nil {
-		return usr, err
+		return usr, fmt.Errorf("%v %v", errors.ErrorTxDB, err)
 	}
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, sqlText)
 	if err != nil {
-		return usr, err
+		return usr, fmt.Errorf("%v %v", errors.ErrorPrepareDB, err)
 	}
 
 	_, err = stmt.ExecContext(ctx, user, pass, keyStr)
 	if err != nil {
-		return usr, err
+		return usr, fmt.Errorf("%v %v", errors.ErrorExecDB, err)
 	}
 
 	if err = tx.Commit(); err != nil {
-		return usr, err
+		return usr, fmt.Errorf("%v %v", errors.ErrorCommitDB, err)
 	}
 
 	usr, err = s.GetUserInfo(user, pass)
@@ -232,7 +233,7 @@ func (s *Store) GetUserInfo(login, password string) (*UserDetail, error) {
 	user := &UserDetail{}
 	err := s.store.QueryRowContext(ctx, sqlText, login, password).Scan(&user.UserID, &user.Login, &user.KeyString)
 	if err != nil {
-		return user, err
+		return user, fmt.Errorf("%v %v", errors.ErrorExecDB, err)
 	}
 
 	return user, nil
@@ -248,7 +249,7 @@ func (s *Store) GetUserKeyString(userID int) (string, error) {
 	var keyString string
 	err := s.store.QueryRowContext(ctx, sqlText, userID).Scan(&keyString)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%v %v", errors.ErrorExecDB, err)
 	}
 
 	return keyString, nil
@@ -259,7 +260,7 @@ func (s *Store) DropUser(login string) error {
 	sqlText := `DELETE FROM gophkeeper.users WHERE login = $1`
 	_, err := s.store.Exec(sqlText, login)
 	if err != nil {
-		return err
+		return fmt.Errorf("%v %v", errors.ErrorExecDB, err)
 	}
 	return nil
 }
