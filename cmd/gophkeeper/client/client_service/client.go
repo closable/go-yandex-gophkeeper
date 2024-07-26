@@ -54,6 +54,21 @@ func (c *GKClient) Run() error {
 		case fmt.Sprintf("q%s", caret):
 			fmt.Println("Работа завершена!")
 			return nil
+		case fmt.Sprintf("g%s", caret):
+			marks := []string{"ИД : "}
+			v := cliapp.DigInput(1, marks, caret)
+			if len(v) != 1 {
+				return errors.New("invalid data input")
+			}
+			id, err := strconv.Atoi(v[0])
+			if err != nil {
+				continue
+			}
+			err = client.DownloadFile(id)
+			if err != nil {
+				fmt.Println(err)
+			}
+
 		case fmt.Sprintf("a%s", caret):
 			marks := []string{"Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка : ", "Метка (для файла оставлять пустой) : ", "Данные (для файла полный путь) : "}
 			v := cliapp.DigInput(3, marks, caret)
@@ -288,6 +303,85 @@ func (c *GKClient) CreateUser(login, password, secret string) error {
 	}
 
 	c.Token = response.Token
+	return nil
+}
+
+func (c *GKClient) DownloadFile(dataID int) error {
+	req := &pb.FileDownloadRequest{
+		DataID: int32(dataID),
+		Token:  c.Token,
+	}
+	stream, err := c.FileClient.Download(context.Background(), req)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	file, err := os.CreateTemp("", fmt.Sprintf("tmp_%s", utils.GetRandomString(10)))
+	//file, err := os.Create(fmt.Sprintf("tmp_%s", utils.GetRandomString(10)))
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer file.Close()
+	filePath := ""
+	dataType := 0
+	for {
+		chank, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			break
+		}
+
+		_, err = file.Write(chank.GetChank())
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+
+		if dataType == 0 {
+			dataType = int(chank.GetDataType())
+			filePath = chank.GetFilePath()
+		}
+	}
+
+	fileDest := filePath
+	if _, err := os.Stat(fileDest); !os.IsNotExist(err) && dataType == 3 {
+		path := strings.Split(filePath, string(os.PathSeparator))
+		filename := strings.Split(path[len(path)-1], ".")
+		if len(filename) == 2 {
+			path[len(path)-1] = fmt.Sprintf("%s(*).%s", filename[0], filename[1])
+		} else {
+			path[len(path)-1] = fmt.Sprintf("%s(*)", filename[0])
+		}
+
+		fileDest = strings.Join(path, string(os.PathSeparator))
+	}
+	fmt.Println("Расположение файла -", fileDest)
+	if dataType == 4 {
+		fileDest = fmt.Sprintf("%s.zip", fileDest)
+	}
+
+	dest, err := os.Create(fileDest)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer dest.Close()
+
+	_, err = file.Seek(int64(0), 0)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	_, err = io.Copy(dest, file)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
 	return nil
 }
 

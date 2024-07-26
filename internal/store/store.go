@@ -30,6 +30,11 @@ type (
 		Login     string
 		KeyString string
 	}
+	FileData struct {
+		Data     string
+		FilePath string
+		DataType int
+	}
 )
 
 // New new storage item
@@ -279,6 +284,24 @@ func (s *Store) DropData(dataID int) error {
 func (s *Store) Upload(stream pb.FilseService_UploadServer) (*pb.FileUploadResponse, error) {
 	var resp pb.FileUploadResponse
 	return &resp, nil
+}
+
+// заглушка для удовлетворению интерфейса
+func (s *Store) Download(in *pb.FileDownloadRequest, stream pb.FilseService_DownloadServer) error {
+	return nil
+}
+
+// Download file data
+func (s *Store) GetFileData(dataID int) (*FileData, error) {
+	sqlText := `SELECT d.data, d.data_type, d.name file_path FROM gophkeeper.users_data d WHERE d.id = $1 and not d.is_deleted and d.data_type > 2`
+
+	data := &FileData{}
+	err := s.store.QueryRow(sqlText, dataID).Scan(&data.Data, &data.DataType, &data.FilePath)
+	if err != nil {
+		return data, fmt.Errorf("%v %v", errors.ErrorExecDB, err)
+	}
+
+	return data, nil
 }
 
 // Сервисная функция, реализующая первоначальное состояние таблиц данных

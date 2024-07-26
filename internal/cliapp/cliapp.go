@@ -125,6 +125,7 @@ func CliAppRun(login, pass, DSN string) error {
 func CliHelp() {
 	var commands = make(map[string]string)
 	commands["a"] = "Добавление"
+	commands["g"] = "Получить файл/папка"
 	commands["d"] = "Удаление"
 	commands["u"] = "Обновление"
 	commands["z"] = "Сжать файл/папка"

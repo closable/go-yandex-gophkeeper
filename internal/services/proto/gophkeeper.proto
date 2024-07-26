@@ -108,6 +108,17 @@ message FileUploadResponse {
   uint32 size = 2;
 }
 
+message FileDownloadRequest {
+    string token = 1;
+    int32 dataID = 2;
+}
+
+message FileDownloadResponse {
+    string FilePath = 1;
+    int32 dataType = 2;
+    bytes chank = 3;
+}
+
 service GophKeeper {
     rpc Login(LoginRequest) returns (LoginResponse);
     rpc AddItem(AddItemRequest) returns (AddItemResponse);
@@ -120,6 +131,7 @@ service GophKeeper {
 
 service FilseService {
     rpc Upload(stream FileUploadRequest) returns (FileUploadResponse);
+    rpc Download(FileDownloadRequest) returns (stream FileDownloadResponse);
     rpc AddItem(AddItemWithTokenRequest) returns (AddItemResponse);
     rpc UpdateItem(UpdateItemWithTokenRequest) returns (UpdateItemResponse);
  }

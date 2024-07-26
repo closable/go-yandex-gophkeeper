@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/closable/go-yandex-gophkeeper/internal/errors"
 	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
@@ -34,9 +35,11 @@ type (
 	// GRPCFileStorager main fileservice interface
 	GRPCFileStorager interface {
 		Upload(stream pb.FilseService_UploadServer) (*pb.FileUploadResponse, error)
+		Download(in *pb.FileDownloadRequest, srv pb.FilseService_DownloadServer) error
 		AddItem(userId, dataType int, data, name string) error
 		UpdateItem(userId, dataId int, data string) error
 		GetUserKeyString(userID int) (string, error)
+		GetFileData(dataID int) (*store.FileData, error)
 	}
 
 	// GophKeeperServer main server structure
@@ -335,4 +338,38 @@ func (s *GophKeeperFileServer) UpdateItem(ctx context.Context, in *pb.UpdateItem
 	}
 	s.logger.Info(fmt.Sprintf("Item updated %v %v", userID, "OK"))
 	return &response, nil
+}
+
+func (s *GophKeeperFileServer) Download(in *pb.FileDownloadRequest, srv pb.FilseService_DownloadServer) error {
+	userID := utils.GetUserID(in.Token)
+	key, err := s.store.GetUserKeyString(userID)
+	if err != nil {
+		return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
+	}
+	data, err := s.store.GetFileData(int(in.DataID))
+	if err != nil || len(data.Data) == 0 {
+		return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
+	}
+
+	reader := strings.NewReader(utils.Decrypt(key, data.Data))
+	buf := make([]byte, 1024)
+	batchNumber := 1
+
+	for {
+		num, err := reader.Read(buf)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
+		}
+		chunk := buf[:num]
+		err = srv.Send(&pb.FileDownloadResponse{FilePath: data.FilePath, DataType: int32(data.DataType), Chank: chunk})
+		if err != nil {
+			return status.Errorf(codes.Code(code.Code_INTERNAL), err.Error())
+		}
+		batchNumber += 1
+	}
+	s.logger.Info(fmt.Sprintf("File downloaded %v %v", data.FilePath, "OK"))
+	return nil
 }

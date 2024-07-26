@@ -301,6 +301,7 @@ var GophKeeper_ServiceDesc = grpc.ServiceDesc{
 
 const (
 	FilseService_Upload_FullMethodName     = "/goyandexgophkeeper.FilseService/Upload"
+	FilseService_Download_FullMethodName   = "/goyandexgophkeeper.FilseService/Download"
 	FilseService_AddItem_FullMethodName    = "/goyandexgophkeeper.FilseService/AddItem"
 	FilseService_UpdateItem_FullMethodName = "/goyandexgophkeeper.FilseService/UpdateItem"
 )
@@ -310,6 +311,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type FilseServiceClient interface {
 	Upload(ctx context.Context, opts ...grpc.CallOption) (FilseService_UploadClient, error)
+	Download(ctx context.Context, in *FileDownloadRequest, opts ...grpc.CallOption) (FilseService_DownloadClient, error)
 	AddItem(ctx context.Context, in *AddItemWithTokenRequest, opts ...grpc.CallOption) (*AddItemResponse, error)
 	UpdateItem(ctx context.Context, in *UpdateItemWithTokenRequest, opts ...grpc.CallOption) (*UpdateItemResponse, error)
 }
@@ -357,6 +359,39 @@ func (x *filseServiceUploadClient) CloseAndRecv() (*FileUploadResponse, error) {
 	return m, nil
 }
 
+func (c *filseServiceClient) Download(ctx context.Context, in *FileDownloadRequest, opts ...grpc.CallOption) (FilseService_DownloadClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &FilseService_ServiceDesc.Streams[1], FilseService_Download_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &filseServiceDownloadClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type FilseService_DownloadClient interface {
+	Recv() (*FileDownloadResponse, error)
+	grpc.ClientStream
+}
+
+type filseServiceDownloadClient struct {
+	grpc.ClientStream
+}
+
+func (x *filseServiceDownloadClient) Recv() (*FileDownloadResponse, error) {
+	m := new(FileDownloadResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *filseServiceClient) AddItem(ctx context.Context, in *AddItemWithTokenRequest, opts ...grpc.CallOption) (*AddItemResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(AddItemResponse)
@@ -382,6 +417,7 @@ func (c *filseServiceClient) UpdateItem(ctx context.Context, in *UpdateItemWithT
 // for forward compatibility
 type FilseServiceServer interface {
 	Upload(FilseService_UploadServer) error
+	Download(*FileDownloadRequest, FilseService_DownloadServer) error
 	AddItem(context.Context, *AddItemWithTokenRequest) (*AddItemResponse, error)
 	UpdateItem(context.Context, *UpdateItemWithTokenRequest) (*UpdateItemResponse, error)
 	mustEmbedUnimplementedFilseServiceServer()
@@ -393,6 +429,9 @@ type UnimplementedFilseServiceServer struct {
 
 func (UnimplementedFilseServiceServer) Upload(FilseService_UploadServer) error {
 	return status.Errorf(codes.Unimplemented, "method Upload not implemented")
+}
+func (UnimplementedFilseServiceServer) Download(*FileDownloadRequest, FilseService_DownloadServer) error {
+	return status.Errorf(codes.Unimplemented, "method Download not implemented")
 }
 func (UnimplementedFilseServiceServer) AddItem(context.Context, *AddItemWithTokenRequest) (*AddItemResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddItem not implemented")
@@ -437,6 +476,27 @@ func (x *filseServiceUploadServer) Recv() (*FileUploadRequest, error) {
 		return nil, err
 	}
 	return m, nil
+}
+
+func _FilseService_Download_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(FileDownloadRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(FilseServiceServer).Download(m, &filseServiceDownloadServer{ServerStream: stream})
+}
+
+type FilseService_DownloadServer interface {
+	Send(*FileDownloadResponse) error
+	grpc.ServerStream
+}
+
+type filseServiceDownloadServer struct {
+	grpc.ServerStream
+}
+
+func (x *filseServiceDownloadServer) Send(m *FileDownloadResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _FilseService_AddItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -496,6 +556,11 @@ var FilseService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "Upload",
 			Handler:       _FilseService_Upload_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "Download",
+			Handler:       _FilseService_Download_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "internal/services/proto/gophkeeper.proto",
