@@ -21,7 +21,7 @@ go-yandex-gophkeeper это современное и производитель
 
 - [Go lang](https://go.dev/) An open-source programming language supported by Google
 - [gRPC](https://grpc.io/) A high performance, open source universal RPC framework
-= [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) Bubble Tea is well-suited for simple and complex terminal applications, either inline, full-window, or a mix of both.
+- [bubbletea](https://github.com/charmbracelet/bubbletea) Bubble Tea is well-suited for simple and complex terminal applications, either inline, full-window, or a mix of both.
 - [postgresql](https://www.postgresql.org/) PostgreSQL: The World's Most Advanced Open Source Relational Database
 
 For server...
