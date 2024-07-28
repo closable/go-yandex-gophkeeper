@@ -38,5 +38,9 @@ func main() {
 	fmt.Println(strings.Repeat("-", 50))
 	fmt.Printf("BuildVersion:%s\nBuildDate:%s\nGitCommit:%s\nCompiler:%s\nPlatform:%s\n", ver.BuildVersion, ver.BuildDate, ver.GitCommit, ver.Compiler, ver.Platform)
 	fmt.Println(strings.Repeat("-", 50))
-	c.Run()
+	if cfg.CLI {
+		c.Run()
+	} else {
+		c.TUI()
+	}
 }

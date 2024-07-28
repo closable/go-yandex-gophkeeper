@@ -11,6 +11,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui"
+	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui/models"
+	tuitable "github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui/table"
+	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui/textinput"
 	"github.com/closable/go-yandex-gophkeeper/internal/cliapp"
 	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	"github.com/closable/go-yandex-gophkeeper/internal/store"
@@ -19,19 +24,27 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-//var BuildVersion, BuildTime, buildCommit = "N/A", "N/A", "N/A"
+type (
+	GKClient struct {
+		Token      string
+		BatchSize  int
+		Client     pb.GophKeeperClient
+		FileClient pb.FilseServiceClient
+	}
+)
 
-type GKClient struct {
-	Token      string
-	BatchSize  int
-	Client     pb.GophKeeperClient
-	FileClient pb.FilseServiceClient
+var columns = []table.Column{
+	{Title: "ИД", Width: 10},
+	{Title: "Тип", Width: 20},
+	{Title: "Метка", Width: 40},
+	{Title: "Данные", Width: 40},
+	{Title: "Размер,байт", Width: 10},
 }
 
 // Run start CLI mode
 func (c *GKClient) Run() error {
-
 	cliapp.CliHelp()
+
 	if len(c.Token) < 10 {
 		fmt.Println(strings.Repeat("-", 50))
 		fmt.Println("Аутентификаця не выполнена, начните с нее!")
@@ -48,6 +61,7 @@ func (c *GKClient) Run() error {
 	for {
 		fmt.Print("Enter command: > ")
 		text, _ := reader.ReadString('\n')
+
 		switch c := text; c {
 		case fmt.Sprintf("h%s", caret):
 			cliapp.CliHelp()
@@ -71,54 +85,25 @@ func (c *GKClient) Run() error {
 
 		case fmt.Sprintf("a%s", caret):
 			marks := []string{"Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка : ", "Метка (для файла оставлять пустой) : ", "Данные (для файла полный путь) : "}
-			v := cliapp.DigInput(3, marks, caret)
-			if len(v) != 3 {
+			data := cliapp.DigInput(3, marks, caret)
+			if len(data) != 3 {
 				return errors.New("invalid data input")
 			}
-
-			dataType, err := strconv.Atoi(v[0])
+			err := client.add(data)
 			if err != nil {
+				fmt.Println(err)
 				continue
-			}
-			switch dataType {
-			// only one file
-			case 3:
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				err := client.UploadFile(ctx, cancel, dataType, v[2], v[1], false, 0)
-				if err != nil {
-					fmt.Println("При загрузке возникла ошибка ", err)
-					continue
-				}
-			// folder
-			case 4:
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				err := client.UploadFile(ctx, cancel, dataType, v[2], v[1], true, 0)
-				if err != nil {
-					fmt.Println("При загрузке возникла ошибка ", err)
-					continue
-				}
-			default:
-				err = client.AddItem(dataType, v[2], v[1])
-				if err != nil {
-					continue
-				}
 			}
 		case fmt.Sprintf("d%s", caret):
 			marks := []string{"ИД : "}
-			v := cliapp.DigInput(1, marks, caret)
-			if len(v) != 1 {
+			data := cliapp.DigInput(1, marks, caret)
+			if len(data) != 1 {
 				return errors.New("invalid data input")
 			}
-			id, err := strconv.Atoi(v[0])
-			if err != nil {
-				continue
-			}
-			err = client.DeleteItem(id)
+			err := client.delete(data)
 			if err != nil {
 				fmt.Println(err)
-				return err
+				continue
 			}
 		case fmt.Sprintf("r%s", caret):
 			marks := []string{"Логин : ", "Пароль :", "Сектретная фраза (можно оставить пустым) :"}
@@ -134,42 +119,15 @@ func (c *GKClient) Run() error {
 			}
 		case fmt.Sprintf("u%s", caret):
 			marks := []string{"Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка : ", "ИД : ", "Данные :"}
-			v := cliapp.DigInput(3, marks, caret)
-			if len(v) != 3 {
+			data := cliapp.DigInput(3, marks, caret)
+			if len(data) != 3 {
 				return errors.New("invalid data input")
 			}
-			dataType, err := strconv.Atoi(v[0])
-			if err != nil {
-				continue
-			}
 
-			id, err := strconv.Atoi(v[1])
+			err := client.update(data)
 			if err != nil {
+				fmt.Println(err)
 				continue
-			}
-			switch dataType {
-			case 3:
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				err := client.UploadFile(ctx, cancel, dataType, v[2], "", false, id)
-				if err != nil {
-					fmt.Println("При загрузке возникла ошибка ", err)
-					continue
-				}
-			case 4:
-				ctx, cancel := context.WithCancel(context.Background())
-				defer cancel()
-				err := client.UploadFile(ctx, cancel, dataType, v[2], "", true, id)
-				if err != nil {
-					fmt.Println("При загрузке возникла ошибка ", err)
-					continue
-				}
-			default:
-				err = client.UpdateItem(id, v[2])
-				if err != nil {
-					fmt.Println(err)
-					return err
-				}
 			}
 		case fmt.Sprintf("l%s", caret):
 			client.ListItems(false)
@@ -188,7 +146,214 @@ func (c *GKClient) Run() error {
 			}
 		}
 	}
+}
 
+func (c *GKClient) TUI() error {
+	client := c
+	for {
+		choice, err := tui.MainMenu(c.Token)
+		if err != nil || choice < 0 {
+			break
+		}
+
+		switch choice {
+		case 0: // create
+			m := make([]models.TuiModelText, 0)
+			m = append(m, models.TuiModelText{Label: "Login", IsEcho: false, CharLimit: 64})
+			m = append(m, models.TuiModelText{Label: "Password", IsEcho: true, CharLimit: 32})
+			m = append(m, models.TuiModelText{Label: "Secret phrase", IsEcho: false, CharLimit: 32})
+			data, err := textinput.TUItext(m)
+			if err != nil {
+				continue
+			}
+			err = client.CreateUser(data[0], data[1], data[2])
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		case 1: // login
+			m := make([]models.TuiModelText, 0)
+			m = append(m, models.TuiModelText{Label: "Login", IsEcho: false, CharLimit: 64})
+			m = append(m, models.TuiModelText{Label: "Password", IsEcho: true, CharLimit: 32})
+			data, err := textinput.TUItext(m)
+			if err != nil {
+				continue
+			}
+			err = client.Login(data[0], data[1])
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		case 2: // List
+			data, err := client.ListItemsData(false)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			tuitable.TUItable(columns, dataToRowsTUI(data))
+		case 3: // List decrypted
+			data, err := client.ListItemsData(true)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			tuitable.TUItable(columns, dataToRowsTUI(data))
+		case 4: // Add
+			m := make([]models.TuiModelText, 0)
+			m = append(m, models.TuiModelText{Label: "Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка", IsEcho: false, CharLimit: 32})
+			m = append(m, models.TuiModelText{Label: "Метка (для файла оставлять пустой)", IsEcho: false, CharLimit: 32})
+			m = append(m, models.TuiModelText{Label: "Данные (для файла полный путь)", IsEcho: false, CharLimit: 32})
+			data, err := textinput.TUItext(m)
+			if err != nil {
+				continue
+			}
+
+			err = client.add(data)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		case 5: // Update
+			m := make([]models.TuiModelText, 0)
+			m = append(m, models.TuiModelText{Label: "Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка", IsEcho: false, CharLimit: 32})
+			m = append(m, models.TuiModelText{Label: "ИД", IsEcho: false, CharLimit: 32})
+			m = append(m, models.TuiModelText{Label: "Данные (для файла полный путь)", IsEcho: false, CharLimit: 32})
+			data, err := textinput.TUItext(m)
+			if err != nil {
+				continue
+			}
+
+			err = c.update(data)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		case 6: //Get file/folder
+			if len(c.Token) < 10 {
+				continue
+			}
+			m := make([]models.TuiModelText, 0)
+			m = append(m, models.TuiModelText{Label: "ИД", IsEcho: false, CharLimit: 64})
+
+			data, err := textinput.TUItext(m)
+			if err != nil {
+				continue
+			}
+
+			id, err := strconv.Atoi(data[0])
+			if err != nil {
+				continue
+			}
+			err = client.DownloadFile(id)
+			if err != nil {
+				fmt.Println(err)
+			}
+		case 7: // Delete
+			m := make([]models.TuiModelText, 0)
+			m = append(m, models.TuiModelText{Label: "ИД", IsEcho: false, CharLimit: 64})
+
+			data, err := textinput.TUItext(m)
+			if err != nil {
+				continue
+			}
+
+			err = client.delete(data)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		}
+	}
+	return nil
+}
+
+func dataToRowsTUI(d []store.RowItem) []table.Row {
+	rows := make([]table.Row, 0)
+	for _, v := range d {
+		rows = append(rows, table.Row{
+			fmt.Sprintf("%d", v.Id), v.Type, v.Name, v.EncData, fmt.Sprintf("%d", v.Length),
+		})
+	}
+	return rows
+}
+
+// add helper function
+func (c *GKClient) add(d []string) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client := c
+	dataType, err := strconv.Atoi(d[0])
+	if err != nil {
+		return err
+	}
+	switch dataType {
+	// only one file
+	case 3:
+		err := client.UploadFile(ctx, cancel, dataType, d[2], d[1], false, 0)
+		if err != nil {
+			return err
+		}
+	// folder
+	case 4:
+		err := client.UploadFile(ctx, cancel, dataType, d[2], d[1], true, 0)
+		if err != nil {
+			return err
+		}
+	default:
+		err = client.AddItem(dataType, d[2], d[1])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// update helper function
+func (c *GKClient) update(d []string) error {
+	client := c
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dataType, err := strconv.Atoi(d[0])
+	if err != nil {
+		return err
+	}
+
+	id, err := strconv.Atoi(d[1])
+	if err != nil {
+		return err
+	}
+	switch dataType {
+	case 3:
+		err := client.UploadFile(ctx, cancel, dataType, d[2], "", false, id)
+		if err != nil {
+			return err
+		}
+	case 4:
+		err := client.UploadFile(ctx, cancel, dataType, d[2], "", true, id)
+		if err != nil {
+			return err
+		}
+	default:
+		err = client.UpdateItem(id, d[2])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *GKClient) delete(d []string) error {
+	client := c
+	id, err := strconv.Atoi(d[0])
+	if err != nil {
+		return err
+	}
+	err = client.DeleteItem(id)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Login auth user
@@ -236,6 +401,35 @@ func (c *GKClient) ListItems(decripted bool) error {
 	utils.OutputListCli(data, false, "")
 
 	return nil
+}
+
+// ListItems list items
+func (c *GKClient) ListItemsData(decripted bool) ([]store.RowItem, error) {
+	req := &pb.ListItemsRequest{
+		Decrypted: decripted,
+	}
+	md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", c.Token)})
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	var header metadata.MD
+	data := make([]store.RowItem, 0)
+
+	response, err := c.Client.ListItems(ctx, req, grpc.Header(&header))
+	if err != nil {
+		return data, err
+	}
+
+	for _, v := range response.Items {
+		data = append(data, store.RowItem{
+			Id:        int(v.Id),
+			Type:      v.Type,
+			Name:      v.Name,
+			IsRestore: v.Restore,
+			EncData:   v.Encdata,
+			Length:    int(v.Length),
+			DataType:  int(v.DataType),
+		})
+	}
+	return data, nil
 }
 
 func (c *GKClient) AddItem(dataType int, data, name string) error {
