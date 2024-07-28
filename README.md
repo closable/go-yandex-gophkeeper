@@ -24,6 +24,14 @@ go-yandex-gophkeeper это современное и производитель
 - [bubbletea](https://github.com/charmbracelet/bubbletea) Bubble Tea is well-suited for simple and complex terminal applications, either inline, full-window, or a mix of both.
 - [postgresql](https://www.postgresql.org/) PostgreSQL: The World's Most Advanced Open Source Relational Database
 
+### Парметры командной строки
+
+- a=":3000" Сервер
+- f=":3100" Сервер для передачи файлов
+- u="user" Логин для входа на серевере
+- p="password" Парол для входа на серевере
+- c  Внутренний интерфейс для работы в режиме CLI (по умолчанию использован TUI)
+
 For server...
 
 ```sh
