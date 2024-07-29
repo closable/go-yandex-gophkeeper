@@ -1,3 +1,4 @@
+// package TUI table
 package tuitable
 
 import (

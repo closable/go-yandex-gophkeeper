@@ -1,3 +1,4 @@
+// Package tui realize TUI intrface for text input
 package textinput
 
 import (

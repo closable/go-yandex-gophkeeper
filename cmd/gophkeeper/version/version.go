@@ -1,3 +1,4 @@
+// Package version realize versionality server/client
 package version
 
 import (

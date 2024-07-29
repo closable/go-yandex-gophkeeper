@@ -1,8 +1,11 @@
+// Package client  realize clinet for work with server serice
 package client
 
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui"
@@ -17,6 +21,7 @@ import (
 	tuitable "github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui/table"
 	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui/textinput"
 	"github.com/closable/go-yandex-gophkeeper/internal/cliapp"
+	errs "github.com/closable/go-yandex-gophkeeper/internal/errors"
 	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	"github.com/closable/go-yandex-gophkeeper/internal/store"
 	"github.com/closable/go-yandex-gophkeeper/internal/utils"
@@ -25,20 +30,127 @@ import (
 )
 
 type (
+	// GKClient client structure
 	GKClient struct {
 		Token      string
 		BatchSize  int
 		Client     pb.GophKeeperClient
 		FileClient pb.FilseServiceClient
+		Cache      LocalCache
+		Offline    bool
+	}
+	// LocalCache cache structure
+	LocalCache struct {
+		Store map[int]store.RowItem
+		mu    sync.Mutex
 	}
 )
 
-var columns = []table.Column{
-	{Title: "ИД", Width: 10},
-	{Title: "Тип", Width: 20},
-	{Title: "Метка", Width: 40},
-	{Title: "Данные", Width: 40},
-	{Title: "Размер,байт", Width: 10},
+var (
+	columns = []table.Column{
+		{Title: "ИД", Width: 10},
+		{Title: "Тип", Width: 20},
+		{Title: "Метка", Width: 40},
+		{Title: "Данные", Width: 40},
+		{Title: "Размер,байт", Width: 10},
+	}
+)
+
+// NewLocalCache new cache instance
+func NewLocalCache() *LocalCache {
+	var store = make(map[int]store.RowItem)
+
+	f, err := os.Open("./cache")
+	if err != nil {
+		fmt.Println("Файл не найден! ", err)
+		return &LocalCache{
+			Store: store,
+		}
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		fmt.Println("Файл кэша не найден! ", err)
+		return &LocalCache{
+			Store: store,
+		}
+	}
+
+	b := make([]byte, stat.Size())
+	_, err = f.Read(b)
+	if err != nil {
+		fmt.Println("Ошибка чтения файла ", err)
+		return &LocalCache{
+			Store: store,
+		}
+	}
+
+	data, err := base64.StdEncoding.DecodeString(string(b))
+	if err != nil {
+		fmt.Println("Ошибка декодирования ", err)
+		return &LocalCache{
+			Store: store,
+		}
+	}
+
+	json.Unmarshal(data, &store)
+
+	return &LocalCache{
+		Store: store,
+	}
+}
+
+// Sync sync data cache
+func (lc *LocalCache) Sync(r []store.RowItem) error {
+	// update all records
+	for _, v := range r {
+		lc.Add(v)
+	}
+	return nil
+}
+
+// ToFile store cache data to local file
+func (lc *LocalCache) ToFile() error {
+	s, err := json.Marshal(lc.Store)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	dec := base64.StdEncoding.EncodeToString([]byte(s))
+	utils.StoreFileData("./cache", dec)
+	fmt.Println("Данные сохранены!")
+
+	return nil
+}
+
+// Clear func clear data in cache
+func (lc *LocalCache) Clear() {
+	lc.Store = make(map[int]store.RowItem)
+}
+
+// Add func add data to cache
+func (lc *LocalCache) Add(r store.RowItem) {
+	lc.mu.Lock()
+	lc.Store[r.Id] = store.RowItem{
+		Id:        r.Id,
+		Type:      r.Type,
+		Name:      r.Name,
+		IsRestore: r.IsRestore,
+		EncData:   r.EncData,
+		Length:    r.Length,
+		DataType:  r.DataType,
+	}
+	lc.mu.Unlock()
+}
+
+// List cache data
+func (lc *LocalCache) List() []store.RowItem {
+	res := make([]store.RowItem, 0)
+	for _, v := range lc.Store {
+		res = append(res, v)
+	}
+	return res
 }
 
 // Run start CLI mode
@@ -148,8 +260,10 @@ func (c *GKClient) Run() error {
 	}
 }
 
+// TUI start TUI mode
 func (c *GKClient) TUI() error {
 	client := c
+
 	for {
 		choice, err := tui.MainMenu(c.Token)
 		if err != nil || choice < 0 {
@@ -158,6 +272,9 @@ func (c *GKClient) TUI() error {
 
 		switch choice {
 		case 0: // create
+			if client.Offline {
+				continue
+			}
 			m := make([]models.TuiModelText, 0)
 			m = append(m, models.TuiModelText{Label: "Login", IsEcho: false, CharLimit: 64})
 			m = append(m, models.TuiModelText{Label: "Password", IsEcho: true, CharLimit: 32})
@@ -169,40 +286,54 @@ func (c *GKClient) TUI() error {
 			err = client.CreateUser(data[0], data[1], data[2])
 			if err != nil {
 				fmt.Println(err)
+				client.Offline = true
 				continue
 			}
 		case 1: // login
+			if client.Offline {
+				continue
+			}
 			m := make([]models.TuiModelText, 0)
 			m = append(m, models.TuiModelText{Label: "Login", IsEcho: false, CharLimit: 64})
 			m = append(m, models.TuiModelText{Label: "Password", IsEcho: true, CharLimit: 32})
 			data, err := textinput.TUItext(m)
 			if err != nil {
+				fmt.Printf("%v %v", errs.ErrorLogin.Error(), err)
 				continue
 			}
 			err = client.Login(data[0], data[1])
 			if err != nil {
-				fmt.Println(err)
+				fmt.Printf("%v %v", errs.ErrorLogin.Error(), err)
+				client.Offline = true
 				continue
 			}
+
+			client.fullSyncCache(false)
 		case 2: // List
-			data, err := client.ListItemsData(false)
+			var data []store.RowItem
+			data, err = client.ListItemsData(false)
 			if err != nil {
 				fmt.Println(err)
-				continue
+				fmt.Println("Warning ! off-line mode")
+				client.Offline = true
+				data = client.Cache.List()
 			}
 			tuitable.TUItable(columns, dataToRowsTUI(data))
 		case 3: // List decrypted
 			data, err := client.ListItemsData(true)
 			if err != nil {
-				fmt.Println(err)
-				continue
+				fmt.Println("Warning ! off-line mode")
+				data = client.Cache.List()
 			}
 			tuitable.TUItable(columns, dataToRowsTUI(data))
 		case 4: // Add
+			if len(c.Token) < 10 || client.Offline {
+				continue
+			}
 			m := make([]models.TuiModelText, 0)
 			m = append(m, models.TuiModelText{Label: "Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка", IsEcho: false, CharLimit: 32})
 			m = append(m, models.TuiModelText{Label: "Метка (для файла оставлять пустой)", IsEcho: false, CharLimit: 32})
-			m = append(m, models.TuiModelText{Label: "Данные (для файла полный путь)", IsEcho: false, CharLimit: 32})
+			m = append(m, models.TuiModelText{Label: "Данные (для файла полный путь)", IsEcho: false, CharLimit: 255})
 			data, err := textinput.TUItext(m)
 			if err != nil {
 				continue
@@ -213,7 +344,11 @@ func (c *GKClient) TUI() error {
 				fmt.Println(err)
 				continue
 			}
+			client.fullSyncCache(true)
 		case 5: // Update
+			if len(c.Token) < 10 || client.Offline {
+				continue
+			}
 			m := make([]models.TuiModelText, 0)
 			m = append(m, models.TuiModelText{Label: "Тип 1-Текст 2-Ключ/Значение 3-Файл 4-Папка", IsEcho: false, CharLimit: 32})
 			m = append(m, models.TuiModelText{Label: "ИД", IsEcho: false, CharLimit: 32})
@@ -228,8 +363,9 @@ func (c *GKClient) TUI() error {
 				fmt.Println(err)
 				continue
 			}
+			client.fullSyncCache(true)
 		case 6: //Get file/folder
-			if len(c.Token) < 10 {
+			if len(c.Token) < 10 || client.Offline {
 				continue
 			}
 			m := make([]models.TuiModelText, 0)
@@ -249,6 +385,9 @@ func (c *GKClient) TUI() error {
 				fmt.Println(err)
 			}
 		case 7: // Delete
+			if len(c.Token) < 10 || client.Offline {
+				continue
+			}
 			m := make([]models.TuiModelText, 0)
 			m = append(m, models.TuiModelText{Label: "ИД", IsEcho: false, CharLimit: 64})
 
@@ -262,11 +401,20 @@ func (c *GKClient) TUI() error {
 				fmt.Println(err)
 				continue
 			}
+			client.fullSyncCache(true)
+		case 9:
+			err := client.Cache.ToFile()
+			if err != nil {
+				fmt.Println(err)
+			}
+			fmt.Println("Работа завершена!")
+			return nil
 		}
 	}
 	return nil
 }
 
+// dataToRowsTUI func transformation types of data
 func dataToRowsTUI(d []store.RowItem) []table.Row {
 	rows := make([]table.Row, 0)
 	for _, v := range d {
@@ -275,6 +423,27 @@ func dataToRowsTUI(d []store.RowItem) []table.Row {
 		})
 	}
 	return rows
+}
+
+// fullSyncCache func for sync cache and server data
+func (c *GKClient) fullSyncCache(clearBefore bool) {
+	client := c
+	if clearBefore {
+		c.Cache.Clear()
+	}
+
+	// get all records from db
+	rows, err := client.ListItemsData(true)
+	if err != nil {
+		client.Offline = true
+		fmt.Println(err)
+	}
+	// sync with local cache
+	err = c.Cache.Sync(rows)
+	if err != nil {
+		fmt.Println(err)
+	}
+
 }
 
 // add helper function
@@ -343,6 +512,7 @@ func (c *GKClient) update(d []string) error {
 	return nil
 }
 
+// delete helper function
 func (c *GKClient) delete(d []string) error {
 	client := c
 	id, err := strconv.Atoi(d[0])
@@ -353,6 +523,23 @@ func (c *GKClient) delete(d []string) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// Health check health status
+func (c *GKClient) Health() error {
+
+	md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", c.Token)})
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	var header metadata.MD
+
+	req := &pb.HealthRequest{Numb: "1"}
+
+	_, err := c.Client.Health(ctx, req, grpc.Header(&header))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -373,9 +560,9 @@ func (c *GKClient) Login(user, pass string) error {
 }
 
 // ListItems list items
-func (c *GKClient) ListItems(decripted bool) error {
+func (c *GKClient) ListItems(decrypted bool) error {
 	req := &pb.ListItemsRequest{
-		Decrypted: decripted,
+		Decrypted: decrypted,
 	}
 	md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", c.Token)})
 	ctx := metadata.NewOutgoingContext(context.Background(), md)
@@ -404,9 +591,9 @@ func (c *GKClient) ListItems(decripted bool) error {
 }
 
 // ListItems list items
-func (c *GKClient) ListItemsData(decripted bool) ([]store.RowItem, error) {
+func (c *GKClient) ListItemsData(decrypted bool) ([]store.RowItem, error) {
 	req := &pb.ListItemsRequest{
-		Decrypted: decripted,
+		Decrypted: decrypted,
 	}
 	md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", c.Token)})
 	ctx := metadata.NewOutgoingContext(context.Background(), md)
@@ -432,6 +619,7 @@ func (c *GKClient) ListItemsData(decripted bool) ([]store.RowItem, error) {
 	return data, nil
 }
 
+// AddItem func add data
 func (c *GKClient) AddItem(dataType int, data, name string) error {
 	req := &pb.AddItemRequest{
 		DataType: int32(dataType),
@@ -451,6 +639,7 @@ func (c *GKClient) AddItem(dataType int, data, name string) error {
 	return nil
 }
 
+// UpdateItem func update stored data
 func (c *GKClient) UpdateItem(dataID int, data string) error {
 	req := &pb.UpdateItemRequest{
 		DataID: int32(dataID),
@@ -468,6 +657,7 @@ func (c *GKClient) UpdateItem(dataID int, data string) error {
 	return nil
 }
 
+// DeleteItem func delete data
 func (c *GKClient) DeleteItem(dataId int) error {
 	req := &pb.DelItemRequest{
 		DataID: int32(dataId),
@@ -483,6 +673,7 @@ func (c *GKClient) DeleteItem(dataId int) error {
 	return nil
 }
 
+// CreateUser func create user
 func (c *GKClient) CreateUser(login, password, secret string) error {
 	req := &pb.CreateUserRequest{
 		User:      login,
@@ -500,6 +691,7 @@ func (c *GKClient) CreateUser(login, password, secret string) error {
 	return nil
 }
 
+// DownloadFile func download binary data
 func (c *GKClient) DownloadFile(dataID int) error {
 	req := &pb.FileDownloadRequest{
 		DataID: int32(dataID),
@@ -579,6 +771,7 @@ func (c *GKClient) DownloadFile(dataID int) error {
 	return nil
 }
 
+// UploadFile func upload binary data
 func (c *GKClient) UploadFile(ctx context.Context, cancel context.CancelFunc, dataType int, path, marker string, folder bool, dataID int) error {
 	destantion := path
 	if folder {
@@ -588,6 +781,25 @@ func (c *GKClient) UploadFile(ctx context.Context, cancel context.CancelFunc, da
 			return err
 		}
 		destantion = des
+	} else {
+		f, err := os.Open(destantion)
+		if err != nil {
+			return err
+		}
+
+		i, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if i.Size()/10000000 > 10 {
+			des, err := utils.ZipFile(path)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+			destantion = des
+		}
+		f.Close()
 	}
 
 	stream, err := c.FileClient.Upload(ctx)
@@ -615,7 +827,7 @@ func (c *GKClient) UploadFile(ctx context.Context, cancel context.CancelFunc, da
 		}
 		chunk := buf[:num]
 		if err := stream.Send(&pb.FileUploadRequest{
-			Chunk: chunk, Token: c.Token, DataType: int32(dataType), Name: mark, Data: path, DataID: int32(dataID),
+			Chunk: chunk, Token: c.Token, DataType: int32(dataType), Name: mark, Data: destantion, DataID: int32(dataID),
 		}); err != nil {
 			return err
 		}

@@ -180,6 +180,38 @@ func ZipFolder(path string) (string, error) {
 	return output, nil
 }
 
+func ZipFile(path string) (string, error) {
+	output := MakePathFile(path, "zip")
+	name := strings.Split(path, string(os.PathSeparator))
+
+	file, err := os.Create(output)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	w := zip.NewWriter(file)
+	defer w.Close()
+
+	f, err := w.Create(name[len(name)-1])
+	if err != nil {
+		return "", err
+	}
+
+	src, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+
+	_, err = io.Copy(f, src)
+	if err != nil {
+		return "", err
+	}
+
+	return output, nil
+}
+
 func GetRandomString(n int) string {
 	s := "qwertyuiopasdfghjklzxcvbnm"
 	result := ""

@@ -119,6 +119,14 @@ message FileDownloadResponse {
     bytes chank = 3;
 }
 
+message HealthRequest{
+    string numb = 1;
+}
+
+message HealthResponse{
+    string error = 1;
+}
+
 service GophKeeper {
     rpc Login(LoginRequest) returns (LoginResponse);
     rpc AddItem(AddItemRequest) returns (AddItemResponse);
@@ -126,6 +134,7 @@ service GophKeeper {
     rpc UpdateItem(UpdateItemRequest) returns (UpdateItemResponse);
     rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
     rpc ListItems(ListItemsRequest) returns (ListItemsResponse);
+    rpc Health(HealthRequest) returns (HealthResponse);
     
 }
 

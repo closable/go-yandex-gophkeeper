@@ -7,6 +7,7 @@ var (
 	ErrorCrypoSeq    = errors.New("invalid crypto keystring")
 	ErrorAuthInfo    = errors.New("login or password is empty")
 	ErrorLoginInfo   = errors.New("login info already present")
+	ErrorLogin       = errors.New("login error")
 	ErrorAddItem     = errors.New("error adding item")
 	ErrorUpdateItem  = errors.New("error updating item")
 	ErrorListData    = errors.New("error list data")

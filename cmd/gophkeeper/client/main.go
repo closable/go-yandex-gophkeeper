@@ -1,9 +1,11 @@
+// Independent clent service
 package main
 
 import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	client "github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/client_service"
 	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/version"
@@ -26,13 +28,37 @@ func main() {
 	}
 
 	defer conn.Close()
+	cache := client.NewLocalCache()
 
 	c := &client.GKClient{
 		Client:     pb.NewGophKeeperClient(conn),
 		FileClient: pb.NewFilseServiceClient(fileConn),
 		Token:      "",
 		BatchSize:  1024,
+		Cache:      *cache,
+		Offline:    false,
 	}
+
+	ticker := time.NewTicker(30 * time.Second)
+	done := make(chan bool)
+	go func() {
+		client := c
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				// start sync server status
+				err := client.Health()
+				if err != nil {
+					c.Offline = true
+				} else {
+					c.Offline = false
+				}
+
+			}
+		}
+	}()
 
 	ver := version.Get()
 	fmt.Println(strings.Repeat("-", 50))

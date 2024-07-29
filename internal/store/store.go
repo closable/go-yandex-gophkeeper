@@ -292,6 +292,17 @@ func (s *Store) Download(in *pb.FileDownloadRequest, stream pb.FilseService_Down
 }
 
 // Download file data
+func (s *Store) Health(n string) error {
+	sqlText := "SELECT $1"
+	var res int
+	err := s.store.QueryRow(sqlText, n).Scan(&res)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// Download file data
 func (s *Store) GetFileData(dataID int) (*FileData, error) {
 	sqlText := `SELECT d.data, d.data_type, d.name file_path FROM gophkeeper.users_data d WHERE d.id = $1 and not d.is_deleted and d.data_type > 2`
 

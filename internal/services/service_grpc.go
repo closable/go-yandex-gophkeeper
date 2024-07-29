@@ -30,6 +30,7 @@ type (
 		GetUserKeyString(userID int) (string, error)
 		CreateUser(user, pass, keyStr string) (*store.UserDetail, error)
 		CheckUser(user string) bool
+		Health(n string) error
 	}
 
 	// GRPCFileStorager main fileservice interface
@@ -58,6 +59,19 @@ type (
 		logger *zap.Logger
 	}
 )
+
+// Health server status
+func (s *GophKeeperServer) Health(ctx context.Context, in *pb.HealthRequest) (*pb.HealthResponse, error) {
+	var response pb.HealthResponse
+
+	err := s.store.Health(in.Numb)
+	if err != nil {
+		s.logger.Info(fmt.Sprintf("Server status %s", err))
+		return &response, err
+	}
+	s.logger.Info(fmt.Sprintf("Server status %s", "online"))
+	return &response, nil
+}
 
 // Login user auth
 func (s *GophKeeperServer) Login(ctx context.Context, in *pb.LoginRequest) (*pb.LoginResponse, error) {
