@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  gophkeeper:
+    image: go-yandex-gophkeeper:local
+    container_name: vigorous_williamson
+    ports:
+      - "3000:3000"
+      - "3100:3100"
+    depends_on: 
+     - postgresql
+    networks:
+      - goph     
+  
+  postgresql:
+    image: postgres:15-alpine
+    container_name: ps-psql
+    ports:
+      - "25432:5432"
+    environment: 
+      - POSTGRES_DB=gophkeeper
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./data:/var/lib/postgresql/data
+    networks:
+      - goph    
+
+networks:
+  goph:
+    driver: bridge 
