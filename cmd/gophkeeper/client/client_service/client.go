@@ -33,6 +33,7 @@ type (
 	// GKClient client structure
 	GKClient struct {
 		Token      string
+		KeyString  string
 		BatchSize  int
 		Client     pb.GophKeeperClient
 		FileClient pb.FilseServiceClient
@@ -58,47 +59,53 @@ var (
 
 // NewLocalCache new cache instance
 func NewLocalCache() *LocalCache {
-	var store = make(map[int]store.RowItem)
+	var st = make(map[int]store.RowItem)
 
+	return &LocalCache{
+		Store: st,
+	}
+}
+
+// CacheDecode decode cache file if exists
+func (lc *LocalCache) CacheDecode(key string) error {
 	f, err := os.Open("./cache")
 	if err != nil {
 		fmt.Println("Файл не найден! ", err)
-		return &LocalCache{
-			Store: store,
-		}
+		return err
 	}
 	defer f.Close()
 
 	stat, err := f.Stat()
 	if err != nil {
 		fmt.Println("Файл кэша не найден! ", err)
-		return &LocalCache{
-			Store: store,
-		}
+		return err
 	}
 
 	b := make([]byte, stat.Size())
 	_, err = f.Read(b)
 	if err != nil {
 		fmt.Println("Ошибка чтения файла ", err)
-		return &LocalCache{
-			Store: store,
-		}
+		return err
 	}
 
 	data, err := base64.StdEncoding.DecodeString(string(b))
 	if err != nil {
 		fmt.Println("Ошибка декодирования ", err)
-		return &LocalCache{
-			Store: store,
-		}
+		return err
 	}
 
-	json.Unmarshal(data, &store)
+	encData := utils.Encrypt(key, string(data))
 
-	return &LocalCache{
-		Store: store,
+	var st = make(map[int]store.RowItem)
+
+	err = json.Unmarshal([]byte(encData), &st)
+	if err != nil {
+		return err
 	}
+
+	lc.Store = st
+
+	return nil
 }
 
 // Sync sync data cache
@@ -111,13 +118,14 @@ func (lc *LocalCache) Sync(r []store.RowItem) error {
 }
 
 // ToFile store cache data to local file
-func (lc *LocalCache) ToFile() error {
+func (lc *LocalCache) ToFile(key string) error {
 	s, err := json.Marshal(lc.Store)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
-	dec := base64.StdEncoding.EncodeToString([]byte(s))
+	encData := utils.Encrypt(key, string(s))
+	dec := base64.StdEncoding.EncodeToString([]byte(encData))
 	utils.StoreFileData("./cache", dec)
 	fmt.Println("Данные сохранены!")
 
@@ -403,7 +411,7 @@ func (c *GKClient) TUI() error {
 			}
 			client.fullSyncCache(true)
 		case 9:
-			err := client.Cache.ToFile()
+			err := client.Cache.ToFile(c.KeyString)
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -456,6 +464,32 @@ func (c *GKClient) add(d []string) error {
 		return err
 	}
 	switch dataType {
+	case 2:
+		type keyValue struct {
+			Key   string
+			Value string
+		}
+
+		m := make([]models.TuiModelText, 0)
+		m = append(m, models.TuiModelText{Label: "Наименование ключа", IsEcho: false, CharLimit: 255})
+		m = append(m, models.TuiModelText{Label: "Значение ключа", IsEcho: false, CharLimit: 255})
+		data, err := textinput.TUItext(m)
+		if err != nil {
+			return err
+		}
+
+		v := &keyValue{Key: data[0], Value: data[1]}
+
+		js, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+
+		err = client.AddItem(dataType, string(js), d[1])
+		if err != nil {
+			return err
+		}
+
 	// only one file
 	case 3:
 		err := client.UploadFile(ctx, cancel, dataType, d[2], d[1], false, 0)
@@ -553,9 +587,13 @@ func (c *GKClient) Login(user, pass string) error {
 	response, err := c.Client.Login(ctx, req)
 	if err != nil {
 		c.Token = "*"
+		c.KeyString = ""
 		return err
 	}
 	c.Token = response.Token
+	c.KeyString = response.KeyString
+
+	c.Cache.CacheDecode(c.KeyString)
 	return nil
 }
 
@@ -841,4 +879,15 @@ func (c *GKClient) UploadFile(ctx context.Context, cancel context.CancelFunc, da
 
 	cancel()
 	return nil
+}
+
+func New(conn, fileConn *grpc.ClientConn) *GKClient {
+	return &GKClient{
+		Client:     pb.NewGophKeeperClient(conn),
+		FileClient: pb.NewFilseServiceClient(fileConn),
+		Token:      "",
+		BatchSize:  1024,
+		Cache:      *NewLocalCache(),
+		Offline:    false,
+	}
 }

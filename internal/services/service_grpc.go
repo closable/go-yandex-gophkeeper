@@ -89,6 +89,7 @@ func (s *GophKeeperServer) Login(ctx context.Context, in *pb.LoginRequest) (*pb.
 	}
 	s.logger.Info(fmt.Sprintf("JWT token created %s", "OK"))
 	response.Token = token
+	response.KeyString = user.KeyString
 	return &response, nil
 }
 

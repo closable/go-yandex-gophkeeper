@@ -10,7 +10,6 @@ import (
 	client "github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/client_service"
 	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/version"
 	"github.com/closable/go-yandex-gophkeeper/internal/config"
-	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -28,17 +27,8 @@ func main() {
 	}
 
 	defer conn.Close()
-	cache := client.NewLocalCache()
 
-	c := &client.GKClient{
-		Client:     pb.NewGophKeeperClient(conn),
-		FileClient: pb.NewFilseServiceClient(fileConn),
-		Token:      "",
-		BatchSize:  1024,
-		Cache:      *cache,
-		Offline:    false,
-	}
-
+	c := client.New(conn, fileConn)
 	ticker := time.NewTicker(30 * time.Second)
 	done := make(chan bool)
 	go func() {
