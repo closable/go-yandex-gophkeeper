@@ -22,6 +22,7 @@ import (
 	"github.com/closable/go-yandex-gophkeeper/cmd/gophkeeper/client/tui/textinput"
 	"github.com/closable/go-yandex-gophkeeper/internal/cliapp"
 	errs "github.com/closable/go-yandex-gophkeeper/internal/errors"
+	miniosrv "github.com/closable/go-yandex-gophkeeper/internal/services/minio-srv"
 	pb "github.com/closable/go-yandex-gophkeeper/internal/services/proto"
 	"github.com/closable/go-yandex-gophkeeper/internal/store"
 	"github.com/closable/go-yandex-gophkeeper/internal/utils"
@@ -39,6 +40,7 @@ type (
 		FileClient pb.FilseServiceClient
 		Cache      LocalCache
 		Offline    bool
+		Minio      *miniosrv.MinioService
 	}
 	// LocalCache cache structure
 	LocalCache struct {
@@ -703,7 +705,19 @@ func (c *GKClient) DeleteItem(dataId int) error {
 	md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", c.Token)})
 	ctx := metadata.NewOutgoingContext(context.Background(), md)
 	var header metadata.MD
-	_, err := c.Client.DelItem(ctx, req, grpc.Header(&header))
+
+	resp, err := c.Client.DataInfo(ctx, &pb.DataDetailRequest{DataID: int32(dataId)}, grpc.Header(&header))
+	if err != nil {
+		return err
+	}
+	if resp.FileName[:5] == "minio" {
+		err = c.Minio.Delete(resp.FileName)
+		if err != nil {
+			return nil
+		}
+	}
+
+	_, err = c.Client.DelItem(ctx, req, grpc.Header(&header))
 	if err != nil {
 		return err
 	}
@@ -735,6 +749,24 @@ func (c *GKClient) DownloadFile(dataID int) error {
 		DataID: int32(dataID),
 		Token:  c.Token,
 	}
+
+	md := metadata.New(map[string]string{"authorization": fmt.Sprintf("Bearer %s", c.Token)})
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	var header metadata.MD
+
+	resp, err := c.Client.DataInfo(ctx, &pb.DataDetailRequest{DataID: int32(dataID)}, grpc.Header(&header))
+	if err != nil {
+		return err
+	}
+	if resp.FileName[:5] == "minio" {
+		// resp.File = "minio: ..."  resp.Encdata = fullPath to download
+		err = c.Minio.Download(resp.FileName, resp.Encdata)
+		if err != nil {
+			return nil
+		}
+		return nil
+	}
+
 	stream, err := c.FileClient.Download(context.Background(), req)
 	if err != nil {
 		fmt.Println(err)
@@ -819,26 +851,46 @@ func (c *GKClient) UploadFile(ctx context.Context, cancel context.CancelFunc, da
 			return err
 		}
 		destantion = des
-	} else {
-		f, err := os.Open(destantion)
+	} //else {
+
+	fmt.Println("dest", destantion)
+	f, err := os.Open(destantion)
+	if err != nil {
+		return err
+	}
+
+	i, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	if i.Size()/1000000 > 100 {
+		minioName := fmt.Sprintf("minio:%s", marker)
+		size, err := c.Minio.Upload(destantion, minioName)
+		if err != nil {
+			fmt.Println("minio", err)
+			return err
+		}
+
+		err = c.AddItem(dataType, destantion, minioName)
 		if err != nil {
 			return err
 		}
 
-		i, err := f.Stat()
+		fmt.Println("\nSuccess", size)
+		return nil
+	}
+
+	if i.Size()/1000000 > 10 && path == destantion {
+		des, err := utils.ZipFile(path)
 		if err != nil {
+			fmt.Println(err)
 			return err
 		}
-		if i.Size()/10000000 > 10 {
-			des, err := utils.ZipFile(path)
-			if err != nil {
-				fmt.Println(err)
-				return err
-			}
-			destantion = des
-		}
-		f.Close()
+		destantion = des
 	}
+	f.Close()
+	//}
 
 	stream, err := c.FileClient.Upload(ctx)
 	if err != nil {
@@ -889,5 +941,6 @@ func New(conn, fileConn *grpc.ClientConn) *GKClient {
 		BatchSize:  1024,
 		Cache:      *NewLocalCache(),
 		Offline:    false,
+		Minio:      miniosrv.NewMinioService(),
 	}
 }

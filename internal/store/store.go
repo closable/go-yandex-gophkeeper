@@ -154,7 +154,7 @@ func (s *Store) ListItems(userId int) ([]RowItem, error) {
 	items := make([]RowItem, 0)
 
 	sqlText := `SELECT d.id, t.name, d.name, d.is_restore,
-					case when d.data_type > 2 then 'данные файлов не отображаются' else d.data end data, length(d.data), d.data_type
+					case when d.data_type > 2 and substr(d.name, 1, 5) <> 'minio'  then 'данные файлов не отображаются' else d.data end data, length(d.data), d.data_type
 					FROM gophkeeper.users_data d
 					INNER JOIN gophkeeper.data_types t ON t.id = d.data_type
 					WHERE d.user_id = $1 and not d.is_deleted
