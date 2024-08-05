@@ -18,13 +18,13 @@ type MinioService struct {
 	SSL        bool
 }
 
-func NewMinioService() *MinioService {
+func NewMinioService(host string) *MinioService {
 	return &MinioService{
-		Host:       "localhost:9000",
-		ID:         "o5S1kmnuSGGtN8Nuyw3O",
-		Secret:     "95hphKAtF2TEF94F99mylMwCui5tKC0rnctYYys3",
+		Host:       host,
+		ID:         "DNwRXfu3SAqGxZBtqLTi",
+		Secret:     "saC76TvvR5P7calPgkhvMfxO3HE68OtfaFYt1HYb",
 		SSL:        false,
-		BucketName: "kapa",
+		BucketName: "gophkeeper",
 	}
 }
 

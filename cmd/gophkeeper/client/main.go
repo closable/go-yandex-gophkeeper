@@ -28,7 +28,7 @@ func main() {
 
 	defer conn.Close()
 
-	c := client.New(conn, fileConn)
+	c := client.New(conn, fileConn, cfg.MinioServerAddress)
 	ticker := time.NewTicker(30 * time.Second)
 	done := make(chan bool)
 	go func() {

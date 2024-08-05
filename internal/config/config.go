@@ -8,6 +8,8 @@ var (
 	FlagRunAddr string
 	// Адрес сервера
 	FlagFileRunAddr string
+	// Адрес minij server
+	FlagMinioAddr string
 	// Использование СУБД
 	FlagDSN string
 	// Логин
@@ -20,12 +22,13 @@ var (
 
 // config описание структур данных среды окружения
 type config struct {
-	ServerAddress     string
-	FileServerAddress string
-	DSN               string
-	Login             string
-	Password          string
-	CLI               bool
+	ServerAddress      string
+	FileServerAddress  string
+	MinioServerAddress string
+	DSN                string
+	Login              string
+	Password           string
+	CLI                bool
 }
 
 // ParseFlags обрабатывает аргументы командной строки
@@ -34,8 +37,9 @@ func ParseFlags() {
 	// регистрируем переменную flagRunAddr
 	flag.StringVar(&FlagRunAddr, "a", ":3000", "address and port to run server")
 	flag.StringVar(&FlagFileRunAddr, "f", ":3100", "address and port to run file server")
-	flag.StringVar(&FlagDSN, "d", "postgres://postgres:1303@localhost:5432/postgres", "access to DBMS")
-	//flag.StringVar(&FlagDSN, "d", "postgres://postgres:postgres@host.docker.internal:25432/postgres?sslmode=disable", "access to DBMS")
+	flag.StringVar(&FlagMinioAddr, "m", ":9100", "address and port minio server")
+	//flag.StringVar(&FlagDSN, "d", "postgres://postgres:1303@localhost:5432/postgres", "access to DBMS")
+	flag.StringVar(&FlagDSN, "d", "postgres://postgres:postgres@host.docker.internal:25432/postgres?sslmode=disable", "access to DBMS")
 	// Для работы в режиме CLI
 	flag.StringVar(&FlagLogin, "u", "", "login access to app")
 	// Для работы в режиме CLI
@@ -50,12 +54,13 @@ func LoadConfig() *config {
 	ParseFlags()
 
 	var config = &config{
-		ServerAddress:     FlagRunAddr,
-		FileServerAddress: FlagFileRunAddr,
-		DSN:               FlagDSN,
-		Login:             FlagLogin,
-		Password:          FlagPassword,
-		CLI:               FlagCLI,
+		ServerAddress:      FlagRunAddr,
+		FileServerAddress:  FlagFileRunAddr,
+		MinioServerAddress: FlagMinioAddr,
+		DSN:                FlagDSN,
+		Login:              FlagLogin,
+		Password:           FlagPassword,
+		CLI:                FlagCLI,
 	}
 
 	return config

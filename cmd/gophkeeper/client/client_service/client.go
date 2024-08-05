@@ -710,13 +710,13 @@ func (c *GKClient) DeleteItem(dataId int) error {
 	if err != nil {
 		return err
 	}
-	if resp.FileName[:5] == "minio" {
+
+	if len(resp.FileName) > 4 && resp.FileName[:5] == "minio" {
 		err = c.Minio.Delete(resp.FileName)
 		if err != nil {
-			return nil
+			return err
 		}
 	}
-
 	_, err = c.Client.DelItem(ctx, req, grpc.Header(&header))
 	if err != nil {
 		return err
@@ -758,7 +758,7 @@ func (c *GKClient) DownloadFile(dataID int) error {
 	if err != nil {
 		return err
 	}
-	if resp.FileName[:5] == "minio" {
+	if len(resp.FileName) > 4 && resp.FileName[:5] == "minio" {
 		// resp.File = "minio: ..."  resp.Encdata = fullPath to download
 		err = c.Minio.Download(resp.FileName, resp.Encdata)
 		if err != nil {
@@ -933,7 +933,7 @@ func (c *GKClient) UploadFile(ctx context.Context, cancel context.CancelFunc, da
 	return nil
 }
 
-func New(conn, fileConn *grpc.ClientConn) *GKClient {
+func New(conn, fileConn *grpc.ClientConn, host string) *GKClient {
 	return &GKClient{
 		Client:     pb.NewGophKeeperClient(conn),
 		FileClient: pb.NewFilseServiceClient(fileConn),
@@ -941,6 +941,6 @@ func New(conn, fileConn *grpc.ClientConn) *GKClient {
 		BatchSize:  1024,
 		Cache:      *NewLocalCache(),
 		Offline:    false,
-		Minio:      miniosrv.NewMinioService(),
+		Minio:      miniosrv.NewMinioService(host),
 	}
 }

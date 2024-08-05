@@ -243,14 +243,16 @@ func (s *GophKeeperServer) DataInfo(ctx context.Context, in *pb.DataDetailReques
 		s.logger.Error(fmt.Sprintf("%v %v %v", errors.ErrorCrypoSeq, userID, err))
 		return &response, err
 	}
-
-	resp, err := s.store.GetFileData(int(in.GetDataID()))
+	resp, err := s.store.GetFileData(int(in.DataID))
 	if err != nil {
 		s.logger.Info(fmt.Sprintf("%v %s", errors.ErrorJWTToken, err))
 		return &response, status.Errorf(codes.Code(code.Code_INTERNAL), fmt.Sprintf("%v %s", errors.ErrorJWTToken, err))
 	}
-
-	response.Encdata = utils.Decrypt(keyString, resp.Data)
+	if resp.DataType > 2 && len(resp.FilePath) > 4 && resp.FilePath[:5] == "minio" {
+		response.Encdata = utils.Decrypt(keyString, resp.Data)
+	} else {
+		response.Encdata = resp.Data
+	}
 	response.DataType = int32(resp.DataType)
 	response.FileName = resp.FilePath
 

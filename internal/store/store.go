@@ -304,7 +304,7 @@ func (s *Store) Health(n string) error {
 
 // Download file data
 func (s *Store) GetFileData(dataID int) (*FileData, error) {
-	sqlText := `SELECT d.data, d.data_type, d.name file_path FROM gophkeeper.users_data d WHERE d.id = $1 and not d.is_deleted and d.data_type > 2`
+	sqlText := `SELECT d.data, d.data_type, d.name file_path FROM gophkeeper.users_data d WHERE d.id = $1 and not d.is_deleted`
 
 	data := &FileData{}
 	err := s.store.QueryRow(sqlText, dataID).Scan(&data.Data, &data.DataType, &data.FilePath)
