@@ -26,11 +26,13 @@ go-yandex-gophkeeper это современное и производитель
 - [gRPC](https://grpc.io/) A high performance, open source universal RPC framework
 - [bubbletea](https://github.com/charmbracelet/bubbletea) Bubble Tea is well-suited for simple and complex terminal applications, either inline, full-window, or a mix of both.
 - [postgresql](https://www.postgresql.org/) PostgreSQL: The World's Most Advanced Open Source Relational Database
+- [minio](https://min.io/) MinIO is a high-performance, S3 compatible object store.
 
 ### Парметры командной строки
 
 - a=":3000" Сервер
-- f=":3100" Сервер для передачи файлов
+- f=":3100" Сервер для хранения файлов < 100 MB
+- m=":9000" Minio cервер для хранения файлов > 100 MB
 - u="user" Логин для входа на серевере
 - p="password" Парол для входа на серевере
 - c  Внутренний интерфейс для работы в режиме CLI (по умолчанию использован TUI)
@@ -47,9 +49,16 @@ docker-compose up
 
 For client
 ```sh
-.client-darwin-m1 -a=:3000 -f=:3100
+.client-darwin-m1 -a=:3000 -f=:3100 m=:9000
 ```
 
+### Внимание! для работы с minio необходимо параметры доступа задать самостоятельно 
+```
+example .env file in the root folder app
+  S3_BUCKET=gophkeeper
+  S3_ACCESS_KEY=DNwRXfu3SAqGxZBtqLTi
+  S3_SECRET_KEY=saC76TvvR5P7calPgkhvMfxO3HE68OtfaFYt1HYb
+```
 
 ## License
 
