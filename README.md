@@ -26,6 +26,7 @@ go-yandex-gophkeeper это современное и производитель
 - [gRPC](https://grpc.io/) A high performance, open source universal RPC framework
 - [bubbletea](https://github.com/charmbracelet/bubbletea) Bubble Tea is well-suited for simple and complex terminal applications, either inline, full-window, or a mix of both.
 - [postgresql](https://www.postgresql.org/) PostgreSQL: The World's Most Advanced Open Source Relational Database
+- [minio](https://min.io/) MinIO is a high-performance, S3 compatible object store.
 
 ### Парметры командной строки
 
