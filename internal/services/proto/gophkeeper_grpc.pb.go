@@ -26,6 +26,7 @@ const (
 	GophKeeper_CreateUser_FullMethodName = "/goyandexgophkeeper.GophKeeper/CreateUser"
 	GophKeeper_ListItems_FullMethodName  = "/goyandexgophkeeper.GophKeeper/ListItems"
 	GophKeeper_Health_FullMethodName     = "/goyandexgophkeeper.GophKeeper/Health"
+	GophKeeper_DataInfo_FullMethodName   = "/goyandexgophkeeper.GophKeeper/DataInfo"
 )
 
 // GophKeeperClient is the client API for GophKeeper service.
@@ -39,6 +40,7 @@ type GophKeeperClient interface {
 	CreateUser(ctx context.Context, in *CreateUserRequest, opts ...grpc.CallOption) (*CreateUserResponse, error)
 	ListItems(ctx context.Context, in *ListItemsRequest, opts ...grpc.CallOption) (*ListItemsResponse, error)
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
+	DataInfo(ctx context.Context, in *DataDetailRequest, opts ...grpc.CallOption) (*DataDetailResponse, error)
 }
 
 type gophKeeperClient struct {
@@ -119,6 +121,16 @@ func (c *gophKeeperClient) Health(ctx context.Context, in *HealthRequest, opts .
 	return out, nil
 }
 
+func (c *gophKeeperClient) DataInfo(ctx context.Context, in *DataDetailRequest, opts ...grpc.CallOption) (*DataDetailResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DataDetailResponse)
+	err := c.cc.Invoke(ctx, GophKeeper_DataInfo_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GophKeeperServer is the server API for GophKeeper service.
 // All implementations must embed UnimplementedGophKeeperServer
 // for forward compatibility
@@ -130,6 +142,7 @@ type GophKeeperServer interface {
 	CreateUser(context.Context, *CreateUserRequest) (*CreateUserResponse, error)
 	ListItems(context.Context, *ListItemsRequest) (*ListItemsResponse, error)
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
+	DataInfo(context.Context, *DataDetailRequest) (*DataDetailResponse, error)
 	mustEmbedUnimplementedGophKeeperServer()
 }
 
@@ -157,6 +170,9 @@ func (UnimplementedGophKeeperServer) ListItems(context.Context, *ListItemsReques
 }
 func (UnimplementedGophKeeperServer) Health(context.Context, *HealthRequest) (*HealthResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Health not implemented")
+}
+func (UnimplementedGophKeeperServer) DataInfo(context.Context, *DataDetailRequest) (*DataDetailResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DataInfo not implemented")
 }
 func (UnimplementedGophKeeperServer) mustEmbedUnimplementedGophKeeperServer() {}
 
@@ -297,6 +313,24 @@ func _GophKeeper_Health_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GophKeeper_DataInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DataDetailRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).DataInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_DataInfo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).DataInfo(ctx, req.(*DataDetailRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GophKeeper_ServiceDesc is the grpc.ServiceDesc for GophKeeper service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -331,6 +365,10 @@ var GophKeeper_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Health",
 			Handler:    _GophKeeper_Health_Handler,
+		},
+		{
+			MethodName: "DataInfo",
+			Handler:    _GophKeeper_DataInfo_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -128,6 +128,15 @@ message HealthResponse{
     string error = 1;
 }
 
+message DataDetailRequest {
+    int32 dataID = 1;
+}
+message DataDetailResponse {
+  string encdata = 1;
+  int32 dataType = 2;
+  string fileName = 3;
+}
+
 service GophKeeper {
     rpc Login(LoginRequest) returns (LoginResponse);
     rpc AddItem(AddItemRequest) returns (AddItemResponse);
@@ -136,6 +145,7 @@ service GophKeeper {
     rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
     rpc ListItems(ListItemsRequest) returns (ListItemsResponse);
     rpc Health(HealthRequest) returns (HealthResponse);
+    rpc DataInfo(DataDetailRequest) returns (DataDetailResponse);
     
 }
 

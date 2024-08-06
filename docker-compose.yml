@@ -8,9 +8,27 @@ services:
       - "3100:3100"
     depends_on: 
      - postgresql
+     - minio
     networks:
-      - goph     
-  
+      - goph
+
+  minio:
+    image: quay.io/minio/minio
+    command: server /data --console-address ":9001"
+    container_name: miniostore 
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    depends_on: 
+      - postgresql  
+    environment:
+      - MINIO_ROOT_USER=ROOTNAME
+      - MINIO_ROOT_PASSWORD=CHANGEME123
+    volumes:
+      - ./data_minio:/data
+    networks:
+      - goph  
+
   postgresql:
     image: postgres:15-alpine
     container_name: ps-psql
