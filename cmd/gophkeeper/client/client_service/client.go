@@ -933,7 +933,7 @@ func (c *GKClient) UploadFile(ctx context.Context, cancel context.CancelFunc, da
 	return nil
 }
 
-func New(conn, fileConn *grpc.ClientConn, host string) *GKClient {
+func New(conn, fileConn *grpc.ClientConn, host, s3Bucket, s3AccessKey, s3SecretKey string) *GKClient {
 	return &GKClient{
 		Client:     pb.NewGophKeeperClient(conn),
 		FileClient: pb.NewFilseServiceClient(fileConn),
@@ -941,6 +941,6 @@ func New(conn, fileConn *grpc.ClientConn, host string) *GKClient {
 		BatchSize:  1024,
 		Cache:      *NewLocalCache(),
 		Offline:    false,
-		Minio:      miniosrv.NewMinioService(host),
+		Minio:      miniosrv.NewMinioService(host, s3Bucket, s3AccessKey, s3SecretKey),
 	}
 }

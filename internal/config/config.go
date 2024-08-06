@@ -37,7 +37,7 @@ func ParseFlags() {
 	// регистрируем переменную flagRunAddr
 	flag.StringVar(&FlagRunAddr, "a", ":3000", "address and port to run server")
 	flag.StringVar(&FlagFileRunAddr, "f", ":3100", "address and port to run file server")
-	flag.StringVar(&FlagMinioAddr, "m", ":9100", "address and port minio server")
+	flag.StringVar(&FlagMinioAddr, "m", "localhost:9000", "address and port minio server")
 	//flag.StringVar(&FlagDSN, "d", "postgres://postgres:1303@localhost:5432/postgres", "access to DBMS")
 	flag.StringVar(&FlagDSN, "d", "postgres://postgres:postgres@host.docker.internal:25432/postgres?sslmode=disable", "access to DBMS")
 	// Для работы в режиме CLI
